@@ -207,35 +207,53 @@ class TaskEngine:
         # 如果包含"你"且不是询问具体信息，更可能是社交对话
         has_you = '你' in query or 'You' in query.lower()
         
-        # 身份相关询问（通常是社交性质）
-        identity_patterns = ['你是', '机器人', '是谁', '哪位']
-        has_identity_question = any(pattern in query for pattern in identity_patterns)
+        # AI身份相关询问（社交性质） - 更精确的模式
+        ai_identity_patterns = ['你是谁', '你是什么', '机器人吗', '你会什么', '你能做什么']
+        has_ai_identity_question = any(pattern in query for pattern in ai_identity_patterns)
         
         # 日常生活询问
         daily_patterns = ['吃了', '睡了', '起床', '下班', '上班', '回家']
         has_daily = any(pattern in query for pattern in daily_patterns)
         
-        # 5. 判断逻辑
-        # 明确的任务指标
-        if has_question_word or has_task_verb:
-            # 但如果是身份询问，仍然算闲聊
-            if has_identity_question:
-                return False
-            return True
+        # 5. 知识性询问检测（新增）
+        # 检测是否是询问具体人物、事物、概念等的知识性问题
+        knowledge_indicators = [
+            # 历史人物、现代人物
+            r'[\u4e00-\u9fff]{2,4}是谁',  # 中文名字+是谁
+            r'谁是[\u4e00-\u9fff]{2,4}',  # 谁是+中文名字
+            # 概念询问
+            r'什么是[\u4e00-\u9fff]+',    # 什么是+概念
+            r'[\u4e00-\u9fff]+是什么',    # 概念+是什么
+            # 地点询问
+            r'[\u4e00-\u9fff]+在哪里',    # 地点+在哪里
+            r'哪里有[\u4e00-\u9fff]+',    # 哪里有+事物
+        ]
+        import re
+        has_knowledge_question = any(re.search(pattern, query) for pattern in knowledge_indicators)
         
-        # 明确的社交指标  
+        # 6. 判断逻辑（优化后）
+        # 明确的社交指标优先
         if has_greeting or has_thanks or has_daily:
+            return False
+        
+        # AI身份询问判断为闲聊
+        if has_ai_identity_question:
             return False
             
         # 关怀性询问：如果是对"你"的关怀询问，更可能是闲聊
-        if has_you and (has_care or has_identity_question):
+        if has_you and has_care:
             return False
+        
+        # 知识性询问优先判断为任务（新增逻辑）
+        if has_knowledge_question:
+            return True
             
+        # 明确的任务指标
+        if has_question_word or has_task_verb:
+            return True
+        
         # 疑问句但没有明确疑问词的情况
-        if has_question_mark and not has_question_word:
-            # 身份询问倾向于闲聊
-            if has_identity_question:
-                return False
+        if has_question_mark:
             # 如果是简短的疑问且包含关怀词，倾向于闲聊
             if len(query) <= 10 and has_care:
                 return False
