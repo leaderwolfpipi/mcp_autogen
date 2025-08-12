@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP AutoGen 新版界面测试</title>
+    <!-- 引入 Markdown 解析库 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+    <!-- 引入 Mermaid 图表库 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .demo-section {
+            margin-bottom: 40px;
+            padding: 20px;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+        }
+        
+        .demo-title {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            color: #2d3748;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        /* 闲聊模式样式 */
+        .chat-message {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        
+        .chat-time {
+            margin-top: 10px;
+            font-size: 12px;
+            opacity: 0.8;
+            text-align: right;
+        }
+        
+        /* 任务模式样式 */
+        .task-container {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        
+        .task-header {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+        
+        .task-content {
+            padding: 20px;
+            background: white;
+        }
+        
+        .mermaid-container {
+            padding: 20px;
+            text-align: center;
+            background: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+        }
+        
+        .node-results {
+            border-top: 1px solid #e2e8f0;
+            background: white;
+        }
+        
+        .node-result-item {
+            padding: 15px 20px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        
+        .node-result-item:last-child {
+            border-bottom: none;
+        }
+        
+        .node-result-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .node-result-step {
+            font-size: 12px;
+            color: #64748b;
+            background: #f1f5f9;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        
+        .node-result-tool {
+            font-weight: 600;
+            color: #1e293b;
+            font-size: 13px;
+            background: #e0e7ff;
+            padding: 4px 12px;
+            border-radius: 6px;
+        }
+        
+        .node-result-status {
+            font-weight: 500;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            text-transform: uppercase;
+            background-color: #dcfce7;
+            color: #166534;
+        }
+        
+        .final-result {
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-top: 1px solid #e2e8f0;
+        }
+        
+        /* Markdown 样式 */
+        .markdown-content h2 {
+            color: #2d3748;
+            margin: 16px 0 8px 0;
+            font-size: 1.3em;
+        }
+        
+        .markdown-content h3 {
+            color: #2d3748;
+            margin: 12px 0 6px 0;
+            font-size: 1.1em;
+        }
+        
+        .markdown-content p {
+            margin: 8px 0;
+            line-height: 1.6;
+        }
+        
+        .markdown-content strong {
+            font-weight: 600;
+        }
+        
+        .markdown-content code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.9em;
+            color: #e53e3e;
+        }
+        
+        .test-btn {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 10px;
+            transition: transform 0.2s;
+        }
+        
+        .test-btn:hover {
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 MCP AutoGen 新版界面</h1>
+            <p>优化后的输出格式 - 闲聊模式与任务模式智能区分</p>
+        </div>
+        
+        <div class="content">
+            <!-- 闲聊模式演示 -->
+            <div class="demo-section">
+                <h2 class="demo-title">💬 闲聊模式演示</h2>
+                <div class="chat-message">
+                    <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                        <span style="font-size: 1.2em; margin-right: 8px;">🤖</span>
+                        <strong>AI 助手</strong>
+                    </div>
+                    <div>你好！很高兴见到你！我是你的AI助手，有什么可以帮助你的吗？</div>
+                    <div class="chat-time">响应时间: 1.23秒</div>
+                </div>
+                
+                <button class="test-btn" onclick="testChatMode()">测试闲聊模式</button>
+            </div>
+            
+            <!-- 任务模式演示 -->
+            <div class="demo-section">
+                <h2 class="demo-title">🔧 任务模式演示</h2>
+                <div class="task-container">
+                    <div class="task-header">
+                        <span style="font-size: 1.2em; margin-right: 8px;">🔧</span>
+                        任务执行模式
+                    </div>
+                    <div class="task-content">
+                        <div class="markdown-content">
+                            <h2>🔧 任务执行模式</h2>
+                            <h3>📊 执行流程图</h3>
+                        </div>
+                    </div>
+                    <div class="mermaid-container">
+                        <div class="mermaid" id="demo-mermaid">
+                            graph TD
+                                Start([开始]) --> A
+                                A(搜索引擎) --> B(文本处理) --> C(报告生成) --> End([完成])
+                        </div>
+                    </div>
+                    <div class="node-results">
+                        <div class="node-result-item">
+                            <div class="node-result-header">
+                                <span class="node-result-step">步骤 1/3</span>
+                                <span class="node-result-tool">搜索引擎</span>
+                                <span class="node-result-status">success</span>
+                            </div>
+                            <div style="font-size: 12px; color: #64748b;">执行时间: 2.45秒</div>
+                        </div>
+                        <div class="node-result-item">
+                            <div class="node-result-header">
+                                <span class="node-result-step">步骤 2/3</span>
+                                <span class="node-result-tool">文本处理</span>
+                                <span class="node-result-status">success</span>
+                            </div>
+                            <div style="font-size: 12px; color: #64748b;">执行时间: 1.12秒</div>
+                        </div>
+                        <div class="node-result-item">
+                            <div class="node-result-header">
+                                <span class="node-result-step">步骤 3/3</span>
+                                <span class="node-result-tool">报告生成</span>
+                                <span class="node-result-status">success</span>
+                            </div>
+                            <div style="font-size: 12px; color: #64748b;">执行时间: 0.89秒</div>
+                        </div>
+                    </div>
+                    <div class="final-result">
+                        <div class="markdown-content">
+                            <h2>✅ 任务执行完成</h2>
+                            <p><strong>总执行时间</strong>: 4.46秒</p>
+                            <h3>🎯 最终结果</h3>
+                            <p>任务已成功完成，生成了包含搜索结果和分析的综合报告。</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <button class="test-btn" onclick="testTaskMode()">测试任务模式</button>
+            </div>
+            
+            <!-- 测试按钮 -->
+            <div class="demo-section">
+                <h2 class="demo-title">🧪 实际测试</h2>
+                <p style="margin-bottom: 20px;">点击下面的按钮连接到实际的后端服务进行测试：</p>
+                
+                <button class="test-btn" onclick="connectToBackend()">连接后端服务</button>
+                <button class="test-btn" onclick="testChat()">测试闲聊：你好</button>
+                <button class="test-btn" onclick="testTask()">测试任务：搜索AI发展</button>
+                
+                <div id="test-output" style="margin-top: 20px; padding: 20px; background: #f8fafc; border-radius: 8px; min-height: 100px;">
+                    <p style="color: #64748b;">测试输出将显示在这里...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化 Mermaid
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                htmlLabels: false,
+                curve: 'basis'
+            }
+        });
+        
+        let websocket = null;
+        let isConnected = false;
+        
+        function testChatMode() {
+            alert('这是闲聊模式的演示！\n\n特点：\n• 简洁的对话界面\n• 流式输出效果\n• 显示响应时间\n• 无复杂的流程图');
+        }
+        
+        function testTaskMode() {
+            alert('这是任务模式的演示！\n\n特点：\n• 显示执行流程图\n• 逐步显示节点执行结果\n• Markdown 格式的内容\n• 最终结果汇总');
+        }
+        
+        function connectToBackend() {
+            const output = document.getElementById('test-output');
+            output.innerHTML = '<p style="color: #667eea;">🔄 正在连接后端服务...</p>';
+            
+            try {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.hostname}:8000/ws/execute_task`;
+                
+                websocket = new WebSocket(wsUrl);
+                
+                websocket.onopen = function() {
+                    isConnected = true;
+                    output.innerHTML = '<p style="color: #48bb78;">✅ 后端服务连接成功！现在可以进行测试了。</p>';
+                };
+                
+                websocket.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        displayMessage(data);
+                    } catch (e) {
+                        output.innerHTML += `<p style="color: #f56565;">❌ 消息解析失败: ${e.message}</p>`;
+                    }
+                };
+                
+                websocket.onclose = function() {
+                    isConnected = false;
+                    output.innerHTML += '<p style="color: #f56565;">❌ 连接已断开</p>';
+                };
+                
+                websocket.onerror = function(error) {
+                    output.innerHTML = '<p style="color: #f56565;">❌ 连接失败，请确保后端服务正在运行</p>';
+                };
+                
+            } catch (error) {
+                output.innerHTML = `<p style="color: #f56565;">❌ 连接错误: ${error.message}</p>`;
+            }
+        }
+        
+        function testChat() {
+            if (!isConnected) {
+                alert('请先连接后端服务！');
+                return;
+            }
+            
+            const payload = {
+                user_input: "你好",
+                input_data: null
+            };
+            
+            websocket.send(JSON.stringify(payload));
+            
+            const output = document.getElementById('test-output');
+            output.innerHTML = '<p style="color: #667eea;">🔄 发送闲聊测试: "你好"</p>';
+        }
+        
+        function testTask() {
+            if (!isConnected) {
+                alert('请先连接后端服务！');
+                return;
+            }
+            
+            const payload = {
+                user_input: "请帮我搜索人工智能的最新发展趋势",
+                input_data: null
+            };
+            
+            websocket.send(JSON.stringify(payload));
+            
+            const output = document.getElementById('test-output');
+            output.innerHTML = '<p style="color: #667eea;">🔄 发送任务测试: "请帮我搜索人工智能的最新发展趋势"</p>';
+        }
+        
+        function displayMessage(data) {
+            const output = document.getElementById('test-output');
+            const { mode, status, step, message, execution_time } = data;
+            
+            let html = '';
+            
+            if (mode === 'chat') {
+                // 闲聊模式显示
+                html = `
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 12px; margin: 10px 0;">
+                        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                            <span style="font-size: 1.2em; margin-right: 8px;">🤖</span>
+                            <strong>AI 助手 (闲聊模式)</strong>
+                        </div>
+                        <div>${message}</div>
+                        ${execution_time ? `<div style="margin-top: 10px; font-size: 12px; opacity: 0.8; text-align: right;">响应时间: ${execution_time.toFixed(2)}秒</div>` : ''}
+                    </div>
+                `;
+            } else if (mode === 'task') {
+                // 任务模式显示
+                if (step === 'pipeline_start') {
+                    html = `
+                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin: 10px 0;">
+                            <div style="background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); color: white; padding: 15px 20px; font-weight: 600;">
+                                <span style="font-size: 1.2em; margin-right: 8px;">🔧</span>
+                                任务执行模式
+                            </div>
+                            <div style="padding: 20px; background: white;">
+                                <div>${message}</div>
+                                ${data.data?.mermaid_diagram ? `
+                                    <div style="padding: 20px; text-align: center; background: #f8fafc; border-top: 1px solid #e2e8f0; margin-top: 15px;">
+                                        <div class="mermaid">${data.data.mermaid_diagram}</div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                } else if (step === 'node_result') {
+                    html = `
+                        <div style="padding: 15px 20px; border-bottom: 1px solid #f1f5f9; background: white; margin: 5px 0;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                <span style="font-size: 12px; color: #64748b; background: #f1f5f9; padding: 4px 8px; border-radius: 4px;">节点结果</span>
+                                <span style="font-weight: 600; color: #1e293b; font-size: 13px; background: #e0e7ff; padding: 4px 12px; border-radius: 6px;">${data.data?.tool_type || 'Unknown'}</span>
+                                <span style="font-weight: 500; padding: 2px 8px; border-radius: 4px; font-size: 11px; text-transform: uppercase; background-color: #dcfce7; color: #166534;">${data.data?.status || 'success'}</span>
+                            </div>
+                            <div>${message}</div>
+                        </div>
+                    `;
+                } else if (step === 'completed') {
+                    html = `
+                        <div style="padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin: 10px 0; border-radius: 8px;">
+                            <div>${message}</div>
+                            ${execution_time ? `<div style="margin-top: 10px; font-size: 12px; opacity: 0.8;">总执行时间: ${execution_time.toFixed(2)}秒</div>` : ''}
+                        </div>
+                    `;
+                }
+            } else {
+                // 兼容旧格式或其他消息
+                html = `<p style="color: #374151; margin: 5px 0;"><strong>${step}:</strong> ${message}</p>`;
+            }
+            
+            output.innerHTML += html;
+            
+            // 重新渲染 Mermaid 图表
+            if (mode === 'task' && step === 'pipeline_start' && data.data?.mermaid_diagram) {
+                setTimeout(() => {
+                    mermaid.init(undefined, output.querySelectorAll('.mermaid'));
+                }, 100);
+            }
+        }
+    </script>
+</body>
+</html> 

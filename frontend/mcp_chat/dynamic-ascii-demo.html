@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🔄 动态ASCII流程图演示</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f8fafc;
+      line-height: 1.6;
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    
+    .header h1 {
+      color: #1e293b;
+      margin-bottom: 10px;
+    }
+    
+    .demo-container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      padding: 30px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    }
+    
+    .controls {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 30px;
+      flex-wrap: wrap;
+    }
+    
+    button {
+      padding: 10px 20px;
+      background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-weight: 500;
+    }
+    
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+    }
+    
+    button.active {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    }
+    
+    .ascii-container {
+      width: 100%;
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      border-radius: 12px;
+      padding: 20px;
+      margin: 16px 0;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      transition: all 0.3s ease;
+    }
+    
+    .ascii-container:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    
+    .ascii-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    
+    .ascii-icon {
+      font-size: 18px;
+      color: #4f46e5;
+      animation: pulse 2s infinite;
+    }
+    
+    .ascii-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #1e293b;
+    }
+    
+    .ascii-diagram {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      position: relative;
+    }
+    
+    .ascii-diagram pre {
+      margin: 0;
+      padding: 0;
+      font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', 'Ubuntu Mono', monospace;
+      font-size: 14px;
+      line-height: 1.8;
+      color: #374151;
+      white-space: pre;
+      overflow-x: auto;
+      font-feature-settings: "liga" 0;
+      font-variant-ligatures: none;
+      animation: fadeInUp 0.5s ease-out;
+      font-variant-emoji: emoji;
+    }
+    
+    .status-info {
+      background: #f1f5f9;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      color: #475569;
+    }
+    
+    .legend {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 16px;
+      margin-top: 20px;
+      border-radius: 0 8px 8px 0;
+    }
+    
+    .legend h4 {
+      margin: 0 0 12px 0;
+      color: #92400e;
+    }
+    
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+    
+    .legend-symbol {
+      font-family: 'SF Mono', monospace;
+      background: white;
+      padding: 2px 6px;
+      border-radius: 4px;
+      min-width: 30px;
+      text-align: center;
+    }
+    
+    @keyframes fadeInUp {
+      0% {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.8;
+        transform: scale(1.05);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🔄 动态ASCII流程图演示</h1>
+    <p>实时反映任务执行状态的智能流程图</p>
+  </div>
+
+  <div class="demo-container">
+    <div class="controls">
+      <button onclick="showStage(0)" class="active" id="btn-0">📋 初始状态</button>
+      <button onclick="showStage(1)" id="btn-1">🔄 开始执行</button>
+      <button onclick="showStage(2)" id="btn-2">⚡ 执行中</button>
+      <button onclick="showStage(3)" id="btn-3">🔧 多工具</button>
+      <button onclick="showStage(4)" id="btn-4">✅ 完成</button>
+      <button onclick="startAutoDemo()" id="btn-auto">🎬 自动演示</button>
+    </div>
+    
+    <div class="status-info" id="status-info">
+      点击上方按钮查看不同执行阶段的动态流程图
+    </div>
+    
+    <div class="ascii-container">
+      <div class="ascii-header">
+        <span class="ascii-icon">📊</span>
+        <span class="ascii-title">执行流程</span>
+      </div>
+      <div class="ascii-diagram">
+        <pre id="diagram-content">    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         │
+         ▼
+    📋 准备就绪</pre>
+      </div>
+    </div>
+
+    <div class="legend">
+      <h4>📖 符号说明</h4>
+      <div class="legend-item">
+        <span class="legend-symbol">⏳</span>
+        <span>等待执行</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-symbol">🔄</span>
+        <span>正在执行</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-symbol">✅</span>
+        <span>执行成功</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-symbol">❌</span>
+        <span>执行失败</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-symbol">│</span>
+        <span>已完成连接（实线）</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-symbol">┆┆┆</span>
+        <span>执行中连接（流动虚线）</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-symbol">┇</span>
+        <span>等待连接（静态虚线）</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const stages = [
+      {
+        name: "初始状态",
+        description: "用户提交任务，系统准备分析",
+        diagram: `    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         │
+         ▼
+    📋 准备就绪`
+      },
+      {
+        name: "开始执行",
+        description: "LLM完成分析，第一个工具开始执行",
+        diagram: `    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         │
+         ▼
+  🔄 🔍 Web Search
+         ┆┆┆
+         ▼
+    🔄 执行中...`
+      },
+      {
+        name: "执行中",
+        description: "Web Search完成，开始文件上传",
+        diagram: `    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         │
+         ▼
+  ✅ 🔍 Web Search
+         │
+         ▼
+  🔄 📦 MinIO Upload
+         ┆┆┆
+         ▼
+    🔄 执行中...`
+      },
+      {
+        name: "多工具流水线",
+        description: "多个工具按流水线方式执行",
+        diagram: `    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         │
+         ▼
+  ✅ 🔍 Web Search
+         │
+         ▼
+  ✅ 📦 MinIO Upload
+         │
+         ▼
+  🔄 📊 Data Analysis
+         ┆┆┆
+         ▼
+    🔄 执行中...`
+      },
+      {
+        name: "全部完成",
+        description: "所有工具执行完毕，任务成功完成",
+        diagram: `    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         │
+         ▼
+  ✅ 🔍 Web Search
+         │
+         ▼
+  ✅ 📦 MinIO Upload
+         │
+         ▼
+  ✅ 📊 Data Analysis
+         │
+         ▼
+    ✅ 任务完成`
+      }
+    ];
+
+    let currentStage = 0;
+    let autoInterval = null;
+
+    function showStage(stageIndex) {
+      if (stageIndex < 0 || stageIndex >= stages.length) return;
+      
+      currentStage = stageIndex;
+      const stage = stages[stageIndex];
+      
+      // 更新按钮状态
+      document.querySelectorAll('button').forEach((btn, index) => {
+        btn.classList.toggle('active', index === stageIndex);
+      });
+      
+      // 更新状态信息
+      document.getElementById('status-info').textContent = 
+        `${stage.name}: ${stage.description}`;
+      
+      // 更新图表内容
+      const diagramElement = document.getElementById('diagram-content');
+      diagramElement.style.opacity = '0';
+      
+      setTimeout(() => {
+        diagramElement.textContent = stage.diagram;
+        diagramElement.style.opacity = '1';
+      }, 150);
+    }
+
+    function startAutoDemo() {
+      if (autoInterval) {
+        clearInterval(autoInterval);
+        autoInterval = null;
+        document.getElementById('btn-auto').textContent = '🎬 自动演示';
+        return;
+      }
+      
+      document.getElementById('btn-auto').textContent = '⏸️ 停止演示';
+      currentStage = 0;
+      
+      autoInterval = setInterval(() => {
+        showStage(currentStage);
+        currentStage = (currentStage + 1) % stages.length;
+      }, 2000);
+    }
+
+    // 初始化
+    showStage(0);
+  </script>
+</body>
+</html> 

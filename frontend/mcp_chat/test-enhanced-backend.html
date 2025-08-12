@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧪 增强版后端测试</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            background: #f0f4f8;
+        }
+        .header {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 16px;
+            text-align: center;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(79, 70, 229, 0.3);
+        }
+        .test-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            height: 600px;
+        }
+        .chat-section, .status-section {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+        .section-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #374151;
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: #fafafa;
+        }
+        .status-display {
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 15px;
+            background: #f9fafb;
+            font-family: 'SF Mono', monospace;
+            font-size: 14px;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            line-height: 1.4;
+        }
+        .message.user {
+            background: #e0e7ff;
+            color: #3730a3;
+            text-align: right;
+        }
+        .message.assistant {
+            background: #f3f4f6;
+            color: #374151;
+        }
+        .message.system {
+            background: #fef3c7;
+            color: #92400e;
+            font-size: 0.9em;
+        }
+        .message.error {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+        .input-area {
+            display: flex;
+            gap: 10px;
+        }
+        .input-area input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        .input-area input:focus {
+            outline: none;
+            border-color: #4f46e5;
+        }
+        .input-area button {
+            padding: 12px 24px;
+            background: #4f46e5;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .input-area button:hover:not(:disabled) {
+            background: #4338ca;
+        }
+        .input-area button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+        .connection-status.connected {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        .connection-status.disconnected {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+        .connection-status.processing {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        .status-dot.connected { background: #10b981; }
+        .status-dot.disconnected { background: #ef4444; }
+        .status-dot.processing { background: #f59e0b; }
+        .status-entry {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-left: 4px solid #4f46e5;
+            background: #f8fafc;
+            border-radius: 4px;
+        }
+        .status-timestamp {
+            font-size: 12px;
+            color: #6b7280;
+        }
+        .quick-tests {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .quick-test-btn {
+            padding: 8px 16px;
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.2s;
+        }
+        .quick-test-btn:hover {
+            background: #e5e7eb;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🧪 增强版MCP后端测试</h1>
+        <p>测试实时状态推送、任务执行流程和前端同步</p>
+    </div>
+    
+    <div class="test-container">
+        <!-- 聊天区域 -->
+        <div class="chat-section">
+            <div class="section-title">💬 聊天测试</div>
+            
+            <div class="connection-status disconnected" id="connectionStatus">
+                <div class="status-dot disconnected" id="statusDot"></div>
+                <span id="statusText">未连接</span>
+            </div>
+            
+            <div class="quick-tests">
+                <div class="quick-test-btn" onclick="sendQuickTest('搜索李白的诗')">搜索测试</div>
+                <div class="quick-test-btn" onclick="sendQuickTest('分析数据')">分析测试</div>
+                <div class="quick-test-btn" onclick="sendQuickTest('你好')">闲聊测试</div>
+                <div class="quick-test-btn" onclick="sendQuickTest('执行复杂任务')">复杂任务</div>
+            </div>
+            
+            <div class="chat-messages" id="chatMessages">
+                <div class="message system">
+                    📡 准备连接到增强版MCP后端...
+                </div>
+            </div>
+            
+            <div class="input-area">
+                <input type="text" id="messageInput" placeholder="输入测试消息..." onkeypress="handleKeyPress(event)">
+                <button id="sendButton" onclick="sendMessage()" disabled>发送</button>
+            </div>
+        </div>
+        
+        <!-- 状态监控区域 -->
+        <div class="status-section">
+            <div class="section-title">📊 实时状态监控</div>
+            <div class="status-display" id="statusDisplay">
+                <div class="status-entry">
+                    <div class="status-timestamp">系统初始化</div>
+                    <div>等待WebSocket连接...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let isProcessing = false;
+        let currentSessionId = null;
+        let messageCount = 0;
+        
+        function initWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            // 连接到现有的 MCP API WebSocket 端点
+            ws = new WebSocket(`${protocol}//localhost:8000/ws/mcp/chat`);
+            
+            ws.onopen = function() {
+                updateConnectionStatus('connected', '✅ 已连接到增强版后端');
+                addStatusEntry('WebSocket连接成功', 'success');
+                document.getElementById('sendButton').disabled = false;
+            };
+            
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            };
+            
+            ws.onclose = function() {
+                updateConnectionStatus('disconnected', '❌ 连接断开');
+                addStatusEntry('WebSocket连接断开，3秒后重连...', 'error');
+                document.getElementById('sendButton').disabled = true;
+                setTimeout(initWebSocket, 3000);
+            };
+            
+            ws.onerror = function(error) {
+                updateConnectionStatus('disconnected', '❌ 连接错误');
+                addStatusEntry(`WebSocket错误: ${error}`, 'error');
+                console.error('WebSocket error:', error);
+            };
+        }
+        
+        function handleWebSocketMessage(data) {
+            addStatusEntry(`收到消息: ${data.type}`, 'info', data);
+            
+            switch(data.type) {
+                case 'mode_detection':
+                    currentSessionId = data.session_id;
+                    addChatMessage('system', `🔍 模式检测: ${data.message}`);
+                    break;
+                    
+                case 'task_planning':
+                    addChatMessage('system', `📋 ${data.message}`);
+                    if (data.plan) {
+                        addStatusEntry('执行计划生成', 'success', data.plan);
+                    }
+                    break;
+                    
+                case 'task_start':
+                    addChatMessage('system', `🚀 ${data.message}`);
+                    addStatusEntry('任务开始执行', 'success', data.plan);
+                    break;
+                    
+                case 'tool_start':
+                    addChatMessage('system', `🔧 ${data.message}`);
+                    addStatusEntry(`工具开始: ${data.tool_name}`, 'info', data);
+                    break;
+                    
+                case 'tool_result':
+                    const step = data.step_data;
+                    const icon = step.status === 'success' ? '✅' : '❌';
+                    addChatMessage('system', `${icon} ${step.tool_name}: ${step.status} (${step.execution_time?.toFixed(2)}s)`);
+                    addStatusEntry(`工具完成: ${step.tool_name}`, step.status, step);
+                    break;
+                    
+                case 'task_complete':
+                    addChatMessage('assistant', data.message);
+                    addChatMessage('system', `✅ 任务完成，用时 ${data.execution_time?.toFixed(2)} 秒`);
+                    addStatusEntry('任务执行完成', 'success', data);
+                    setProcessing(false);
+                    break;
+                    
+                case 'chat_response':
+                    addChatMessage('assistant', data.message);
+                    addStatusEntry('闲聊回复完成', 'success');
+                    setProcessing(false);
+                    break;
+                    
+                case 'error':
+                    addChatMessage('error', '❌ ' + data.message);
+                    addStatusEntry('执行错误', 'error', data);
+                    setProcessing(false);
+                    break;
+                    
+                default:
+                    addStatusEntry(`未知消息类型: ${data.type}`, 'warning', data);
+            }
+        }
+        
+        function addChatMessage(type, content) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = content;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        function addStatusEntry(message, type = 'info', data = null) {
+            const statusDisplay = document.getElementById('statusDisplay');
+            const entryDiv = document.createElement('div');
+            entryDiv.className = 'status-entry';
+            
+            const timestamp = new Date().toLocaleTimeString();
+            const typeIcon = {
+                'success': '✅',
+                'error': '❌',
+                'warning': '⚠️',
+                'info': 'ℹ️'
+            }[type] || 'ℹ️';
+            
+            entryDiv.innerHTML = `
+                <div class="status-timestamp">${timestamp}</div>
+                <div>${typeIcon} ${message}</div>
+                ${data ? `<pre style="font-size: 12px; margin-top: 5px; color: #6b7280;">${JSON.stringify(data, null, 2)}</pre>` : ''}
+            `;
+            
+            statusDisplay.appendChild(entryDiv);
+            statusDisplay.scrollTop = statusDisplay.scrollHeight;
+        }
+        
+        function updateConnectionStatus(status, text) {
+            const statusContainer = document.getElementById('connectionStatus');
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            
+            statusContainer.className = `connection-status ${status}`;
+            statusDot.className = `status-dot ${status}`;
+            statusText.textContent = text;
+        }
+        
+        function setProcessing(processing) {
+            isProcessing = processing;
+            const sendButton = document.getElementById('sendButton');
+            
+            if (processing) {
+                sendButton.disabled = true;
+                sendButton.textContent = '处理中...';
+                updateConnectionStatus('processing', '🔄 正在处理...');
+            } else {
+                sendButton.disabled = false;
+                sendButton.textContent = '发送';
+                updateConnectionStatus('connected', '✅ 已连接到增强版后端');
+            }
+        }
+        
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message || !ws || ws.readyState !== WebSocket.OPEN || isProcessing) {
+                return;
+            }
+            
+            messageCount++;
+            addChatMessage('user', message);
+            addStatusEntry(`发送消息 #${messageCount}: ${message.substring(0, 50)}...`);
+            
+            ws.send(JSON.stringify({
+                user_input: message,
+                session_id: currentSessionId
+            }));
+            
+            input.value = '';
+            setProcessing(true);
+        }
+        
+        function sendQuickTest(message) {
+            const input = document.getElementById('messageInput');
+            input.value = message;
+            sendMessage();
+        }
+        
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !isProcessing) {
+                sendMessage();
+            }
+        }
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            addStatusEntry('页面加载完成，开始初始化WebSocket连接...');
+            initWebSocket();
+        });
+    </script>
+</body>
+</html> 

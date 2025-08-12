@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前后端对接测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .output {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-item {
+            margin-bottom: 10px;
+            padding: 5px;
+            border-left: 3px solid #ddd;
+        }
+        .log-item.success {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        .log-item.error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        .log-item.progress {
+            border-left-color: #007bff;
+            background: #d1ecf1;
+        }
+        .status {
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .tool-result {
+            background: #e9ecef;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .tool-result h4 {
+            margin: 0 0 10px 0;
+            color: #495057;
+        }
+        .tool-result .summary {
+            font-weight: bold;
+            color: #007bff;
+        }
+        .tool-result .output {
+            background: white;
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔗 前后端对接测试</h1>
+        
+        <div id="status" class="status disconnected">
+            ❌ 未连接到后端
+        </div>
+        
+        <div class="input-group">
+            <label for="taskInput">任务描述:</label>
+            <textarea id="taskInput" placeholder="请输入任务描述，例如：请帮我搜索诸葛亮的信息并生成报告"></textarea>
+        </div>
+        
+        <div>
+            <button onclick="connect()" id="connectBtn">🔌 连接WebSocket</button>
+            <button onclick="execute()" id="executeBtn" disabled>🚀 执行任务</button>
+            <button onclick="clear()">🗑️ 清空日志</button>
+        </div>
+        
+        <div class="output" id="output">
+            <div class="log-item">等待连接...</div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let connected = false;
+        
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const div = document.createElement('div');
+            div.className = `log-item ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            output.appendChild(div);
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        function updateStatus() {
+            const statusEl = document.getElementById('status');
+            const connectBtn = document.getElementById('connectBtn');
+            const executeBtn = document.getElementById('executeBtn');
+            
+            if (connected) {
+                statusEl.className = 'status connected';
+                statusEl.textContent = '✅ 已连接到后端';
+                connectBtn.textContent = '🔌 断开连接';
+                executeBtn.disabled = false;
+            } else {
+                statusEl.className = 'status disconnected';
+                statusEl.textContent = '❌ 未连接到后端';
+                connectBtn.textContent = '🔌 连接WebSocket';
+                executeBtn.disabled = true;
+            }
+        }
+        
+        function connect() {
+            if (connected) {
+                ws.close();
+                return;
+            }
+            
+            log('正在连接WebSocket...', 'progress');
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const url = `${protocol}//${window.location.hostname}:8000/ws/execute_task`;
+            
+            ws = new WebSocket(url);
+            
+            ws.onopen = () => {
+                connected = true;
+                updateStatus();
+                log('WebSocket连接成功', 'success');
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('收到消息:', data);
+                    
+                    switch (data.step) {
+                        case 'import_tools':
+                            log(`📦 ${data.message}`, 'progress');
+                            break;
+                            
+                        case 'smart_pipeline_execution':
+                            log(`🤖 ${data.message}`, 'progress');
+                            break;
+                            
+                        case 'node_result':
+                            log(`🔧 工具执行完成: ${data.data.tool_type}`, 'success');
+                            
+                            // 显示工具执行结果
+                            const toolDiv = document.createElement('div');
+                            toolDiv.className = 'tool-result';
+                            toolDiv.innerHTML = `
+                                <h4>🔧 ${data.data.tool_type}</h4>
+                                <div class="summary">📊 ${data.data.result_summary}</div>
+                                <div>⏱️ 执行时间: ${data.data.execution_time.toFixed(2)}秒</div>
+                                <div>📄 状态: ${data.data.status}</div>
+                                ${data.data.output && typeof data.data.output === 'string' ? 
+                                    `<div class="output">输出内容:<br>${data.data.output.substring(0, 500)}${data.data.output.length > 500 ? '...' : ''}</div>` : 
+                                    '<div class="output">输出内容: 无文本输出</div>'
+                                }
+                            `;
+                            document.getElementById('output').appendChild(toolDiv);
+                            break;
+                            
+                        case 'pipeline_executed':
+                            log(`✅ ${data.message}`, 'success');
+                            break;
+                            
+                        case 'completed':
+                            log(`🎉 ${data.message}`, 'success');
+                            break;
+                            
+                        case 'failed':
+                        case 'pipeline_failed':
+                            log(`❌ ${data.message}`, 'error');
+                            break;
+                            
+                        default:
+                            log(`📝 ${data.step}: ${data.message}`, data.status || 'info');
+                    }
+                } catch (e) {
+                    log('消息解析失败: ' + e.message, 'error');
+                }
+            };
+            
+            ws.onclose = () => {
+                connected = false;
+                updateStatus();
+                log('WebSocket连接断开', 'error');
+            };
+            
+            ws.onerror = (error) => {
+                log('WebSocket错误: ' + error, 'error');
+            };
+        }
+        
+        function execute() {
+            if (!connected) {
+                log('请先连接WebSocket', 'error');
+                return;
+            }
+            
+            const input = document.getElementById('taskInput').value.trim();
+            if (!input) {
+                log('请输入任务描述', 'error');
+                return;
+            }
+            
+            const payload = {
+                user_input: input,
+                input_data: null
+            };
+            
+            ws.send(JSON.stringify(payload));
+            log('任务已发送', 'progress');
+        }
+        
+        function clear() {
+            document.getElementById('output').innerHTML = '<div class="log-item">日志已清空</div>';
+        }
+        
+        // 页面加载时自动连接
+        window.onload = () => {
+            updateStatus();
+            setTimeout(() => {
+                connect();
+            }, 1000);
+        };
+    </script>
+</body>
+</html> 

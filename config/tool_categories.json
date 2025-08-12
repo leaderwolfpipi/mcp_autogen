@@ -1,0 +1,234 @@
+{
+  "categories": [
+    {
+      "name": "搜索工具",
+      "keywords": [
+        "search",
+        "baidu",
+        "google",
+        "bing",
+        "query",
+        "find",
+        "lookup"
+      ],
+      "output_patterns": [
+        "results",
+        "search_results",
+        "query_results",
+        "total_count"
+      ],
+      "emoji": "🔍",
+      "description": "用于信息搜索和查询的工具",
+      "priority": 10
+    },
+    {
+      "name": "图像处理工具",
+      "keywords": [
+        "image",
+        "rotator",
+        "scaler",
+        "processor",
+        "filter",
+        "transform",
+        "resize",
+        "crop",
+        "enhance"
+      ],
+      "output_patterns": [
+        "temp_path",
+        "processed_image",
+        "image_path",
+        "rotated",
+        "scaled",
+        "enhanced"
+      ],
+      "emoji": "🖼️",
+      "description": "处理图像文件的工具",
+      "priority": 10
+    },
+    {
+      "name": "文本处理工具",
+      "keywords": [
+        "text",
+        "translator",
+        "formatter",
+        "parser",
+        "analyzer",
+        "summarizer",
+        "extractor"
+      ],
+      "output_patterns": [
+        "translated_text",
+        "formatted_text",
+        "processed_text",
+        "summary",
+        "extracted_text"
+      ],
+      "emoji": "📝",
+      "description": "处理文本内容的工具",
+      "priority": 10
+    },
+    {
+      "name": "文件处理工具",
+      "keywords": [
+        "file",
+        "writer",
+        "reader",
+        "converter",
+        "compressor",
+        "extractor"
+      ],
+      "output_patterns": [
+        "file_path",
+        "output_path",
+        "converted_file",
+        "compressed_file"
+      ],
+      "emoji": "📁",
+      "description": "处理文件操作的工具",
+      "priority": 8
+    },
+    {
+      "name": "上传工具",
+      "keywords": [
+        "upload",
+        "uploader",
+        "minio",
+        "s3",
+        "cloud",
+        "storage",
+        "cdn"
+      ],
+      "output_patterns": [
+        "upload_url",
+        "download_url",
+        "file_url",
+        "cdn_url"
+      ],
+      "emoji": "☁️",
+      "description": "文件上传和存储工具",
+      "priority": 8
+    },
+    {
+      "name": "数据分析工具",
+      "keywords": [
+        "analyzer",
+        "analyzer",
+        "statistics",
+        "metrics",
+        "chart",
+        "graph",
+        "dashboard"
+      ],
+      "output_patterns": [
+        "analysis_result",
+        "statistics",
+        "charts",
+        "metrics",
+        "dashboard_data"
+      ],
+      "emoji": "📊",
+      "description": "数据分析和可视化工具",
+      "priority": 7
+    },
+    {
+      "name": "代码处理工具",
+      "keywords": [
+        "code",
+        "generator",
+        "compiler",
+        "linter",
+        "formatter",
+        "debugger"
+      ],
+      "output_patterns": [
+        "generated_code",
+        "compiled_code",
+        "formatted_code",
+        "debug_info"
+      ],
+      "emoji": "💻",
+      "description": "代码生成和处理工具",
+      "priority": 7
+    },
+    {
+      "name": "AI模型工具",
+      "keywords": [
+        "ai",
+        "model",
+        "llm",
+        "gpt",
+        "bert",
+        "neural",
+        "ml"
+      ],
+      "output_patterns": [
+        "model_output",
+        "prediction",
+        "embedding",
+        "classification"
+      ],
+      "emoji": "🤖",
+      "description": "AI模型和机器学习工具",
+      "priority": 9
+    },
+    {
+      "name": "数据库工具",
+      "keywords": [
+        "database",
+        "db",
+        "sql",
+        "nosql",
+        "query",
+        "migration"
+      ],
+      "output_patterns": [
+        "query_result",
+        "db_connection",
+        "migration_status"
+      ],
+      "emoji": "🗄️",
+      "description": "数据库操作工具",
+      "priority": 6
+    },
+    {
+      "name": "网络工具",
+      "keywords": [
+        "network",
+        "http",
+        "api",
+        "rest",
+        "websocket",
+        "proxy"
+      ],
+      "output_patterns": [
+        "response",
+        "status_code",
+        "headers",
+        "connection_status"
+      ],
+      "emoji": "🌐",
+      "description": "网络和API工具",
+      "priority": 6
+    },
+    {
+      "name": "区块链工具",
+      "keywords": [
+        "blockchain",
+        "crypto",
+        "ethereum",
+        "bitcoin",
+        "smart_contract"
+      ],
+      "output_patterns": [
+        "block_data",
+        "transaction",
+        "wallet",
+        "contract"
+      ],
+      "emoji": "⛓️",
+      "description": "区块链和加密货币相关工具",
+      "priority": 8
+    }
+  ]
+}

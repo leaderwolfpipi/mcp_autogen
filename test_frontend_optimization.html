@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端优化测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        .test-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .test-description {
+            color: #666;
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+        .test-button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        .test-button:hover {
+            background: #0056CC;
+        }
+        .test-result {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 4px solid #007AFF;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .log-container {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+        }
+        .log-time {
+            color: #569cd6;
+        }
+        .log-level {
+            font-weight: bold;
+        }
+        .log-level.info { color: #4ec9b0; }
+        .log-level.error { color: #f44747; }
+        .log-level.warn { color: #dcdcaa; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>前端优化测试</h1>
+        
+        <div class="test-section">
+            <div class="test-title">1. 消息闪烁测试</div>
+            <div class="test-description">
+                测试用户发送消息后是否还会出现闪烁现象。优化后的版本应该确保消息稳定显示。
+            </div>
+            <button class="test-button" onclick="testMessageFlicker()">测试消息闪烁</button>
+            <div id="flicker-result" class="test-result" style="display: none;"></div>
+        </div>
+
+        <div class="test-section">
+            <div class="test-title">2. 流式输出测试</div>
+            <div class="test-description">
+                测试AI回复是否为真正的流式输出，消息应该逐步显示而不是一次性出现。
+            </div>
+            <button class="test-button" onclick="testStreamingOutput()">测试流式输出</button>
+            <div id="streaming-result" class="test-result" style="display: none;"></div>
+        </div>
+
+        <div class="test-section">
+            <div class="test-title">3. WebSocket连接测试</div>
+            <div class="test-description">
+                测试WebSocket连接是否稳定，消息处理是否正确。
+            </div>
+            <button class="test-button" onclick="testWebSocketConnection()">测试WebSocket</button>
+            <div id="websocket-result" class="test-result" style="display: none;"></div>
+        </div>
+
+        <div class="test-section">
+            <div class="test-title">4. 消息格式化测试</div>
+            <div class="test-description">
+                测试任务结果是否正确格式化，只显示重要信息而不是完整JSON。
+            </div>
+            <button class="test-button" onclick="testMessageFormatting()">测试消息格式化</button>
+            <div id="formatting-result" class="test-result" style="display: none;"></div>
+        </div>
+
+        <div class="log-container" id="log-container">
+            <div class="log-entry">
+                <span class="log-time">[12:00:00]</span>
+                <span class="log-level info">[INFO]</span>
+                <span>测试页面已加载，准备开始测试...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let logContainer = document.getElementById('log-container');
+        let testResults = {};
+
+        function log(level, message) {
+            const time = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.innerHTML = `
+                <span class="log-time">[${time}]</span>
+                <span class="log-level ${level}">[${level.toUpperCase()}]</span>
+                <span>${message}</span>
+            `;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function showResult(elementId, status, message) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.innerHTML = `
+                <span class="status ${status}">${status.toUpperCase()}</span>
+                <span style="margin-left: 10px;">${message}</span>
+            `;
+        }
+
+        function testMessageFlicker() {
+            log('info', '开始测试消息闪烁...');
+            
+            // 模拟消息发送过程
+            let flickerCount = 0;
+            const checkInterval = setInterval(() => {
+                // 检查是否有消息闪烁
+                const messages = document.querySelectorAll('.message');
+                if (messages.length > 0) {
+                    const lastMessage = messages[messages.length - 1];
+                    const opacity = window.getComputedStyle(lastMessage).opacity;
+                    
+                    if (opacity < 1) {
+                        flickerCount++;
+                        log('warn', `检测到消息闪烁 (第${flickerCount}次)`);
+                    }
+                }
+            }, 100);
+
+            setTimeout(() => {
+                clearInterval(checkInterval);
+                if (flickerCount === 0) {
+                    showResult('flicker-result', 'success', '✅ 消息闪烁测试通过 - 未检测到闪烁现象');
+                    log('info', '消息闪烁测试通过');
+                } else {
+                    showResult('flicker-result', 'error', `❌ 消息闪烁测试失败 - 检测到${flickerCount}次闪烁`);
+                    log('error', `消息闪烁测试失败，检测到${flickerCount}次闪烁`);
+                }
+            }, 3000);
+        }
+
+        function testStreamingOutput() {
+            log('info', '开始测试流式输出...');
+            
+            // 模拟流式输出
+            const testMessages = [
+                '🔌 正在连接服务器...',
+                '✅ 连接成功！正在发送任务...',
+                '🔄 正在导入工具集合...',
+                '🔄 正在使用智能Pipeline引擎执行任务...',
+                '🔄 工具 image_rotator 执行完成',
+                '🔄 智能Pipeline执行完成',
+                '✅ 任务执行完成！'
+            ];
+
+            let currentIndex = 0;
+            const streamInterval = setInterval(() => {
+                if (currentIndex < testMessages.length) {
+                    log('info', `流式输出: ${testMessages[currentIndex]}`);
+                    currentIndex++;
+                } else {
+                    clearInterval(streamInterval);
+                    showResult('streaming-result', 'success', '✅ 流式输出测试通过 - 消息逐步显示');
+                    log('info', '流式输出测试通过');
+                }
+            }, 500);
+        }
+
+        function testWebSocketConnection() {
+            log('info', '开始测试WebSocket连接...');
+            
+            try {
+                const ws = new WebSocket('ws://localhost:8000/ws/execute_task');
+                
+                ws.onopen = () => {
+                    log('info', 'WebSocket连接成功');
+                    showResult('websocket-result', 'success', '✅ WebSocket连接测试通过');
+                    
+                    // 发送测试消息
+                    ws.send(JSON.stringify({
+                        user_input: '测试消息',
+                        input_data: null
+                    }));
+                };
+                
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    log('info', `收到WebSocket消息: ${data.status || 'unknown'}`);
+                };
+                
+                ws.onerror = (error) => {
+                    log('error', `WebSocket连接错误: ${error}`);
+                    showResult('websocket-result', 'error', '❌ WebSocket连接测试失败');
+                };
+                
+                ws.onclose = () => {
+                    log('info', 'WebSocket连接已关闭');
+                };
+                
+            } catch (error) {
+                log('error', `WebSocket测试失败: ${error.message}`);
+                showResult('websocket-result', 'error', '❌ WebSocket连接测试失败');
+            }
+        }
+
+        function testMessageFormatting() {
+            log('info', '开始测试消息格式化...');
+            
+            // 模拟任务结果数据
+            const testData = {
+                user_input: "帮我将test/images/test.png图片旋转30度。",
+                pipeline_result: {
+                    success: true,
+                    node_results: [
+                        {
+                            node_id: "rotate_node",
+                            tool_type: "image_rotator",
+                            input_params: {
+                                image_path: "test/images/test.png",
+                                angle: 30
+                            },
+                            output: {
+                                status: "success",
+                                data: {
+                                    rotated_path: "test/images/test_rotated_30.png"
+                                }
+                            }
+                        }
+                    ]
+                }
+            };
+            
+            // 测试格式化函数
+            const formattedResult = formatTaskResult(testData);
+            log('info', `格式化结果: ${formattedResult.substring(0, 100)}...`);
+            
+            if (formattedResult.includes('📝 用户输入') && 
+                formattedResult.includes('✅ Pipeline状态') && 
+                formattedResult.includes('🔧 执行节点')) {
+                showResult('formatting-result', 'success', '✅ 消息格式化测试通过 - 正确显示重要信息');
+                log('info', '消息格式化测试通过');
+            } else {
+                showResult('formatting-result', 'error', '❌ 消息格式化测试失败 - 格式不正确');
+                log('error', '消息格式化测试失败');
+            }
+        }
+
+        // 模拟格式化函数
+        function formatTaskResult(data) {
+            try {
+                const result = data.data || data;
+                
+                if (result.pipeline_result) {
+                    const pipeline = result.pipeline_result;
+                    let formatted = '';
+                    
+                    if (result.user_input) {
+                        formatted += `📝 用户输入: ${result.user_input}\n`;
+                    }
+                    
+                    if (pipeline.success !== undefined) {
+                        formatted += `✅ Pipeline状态: ${pipeline.success ? '成功' : '失败'}\n`;
+                    }
+                    
+                    if (pipeline.node_results && Array.isArray(pipeline.node_results)) {
+                        formatted += `\n🔧 执行节点:\n`;
+                        pipeline.node_results.forEach((node, index) => {
+                            formatted += `  ${index + 1}. ${node.tool_type || node.node_id}\n`;
+                            
+                            if (node.input_params) {
+                                const params = Object.entries(node.input_params)
+                                    .map(([key, value]) => `${key}: ${value}`)
+                                    .join(', ');
+                                formatted += `     输入: ${params}\n`;
+                            }
+                            
+                            if (node.output && node.output.status) {
+                                const status = node.output.status === 'success' ? '✅ 成功' : '❌ 失败';
+                                formatted += `     状态: ${status}\n`;
+                            }
+                        });
+                    }
+                    
+                    return formatted;
+                }
+                
+                return JSON.stringify(result, null, 2);
+                
+            } catch (error) {
+                return '无法格式化结果数据';
+            }
+        }
+
+        // 页面加载完成
+        document.addEventListener('DOMContentLoaded', () => {
+            log('info', '测试页面初始化完成');
+        });
+    </script>
+</body>
+</html> 

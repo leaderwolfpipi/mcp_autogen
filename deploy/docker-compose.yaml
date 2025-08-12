@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    container_name: mcp_pg
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mypass123_lh007
+      POSTGRES_DB: mcp
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - mcpnet
+
+  web:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: mcp_web
+    depends_on:
+      - db
+    environment:
+      PG_HOST: db
+      PG_PORT: 5432
+      PG_USER: postgres
+      PG_PASSWORD: mypass123_lh007
+      PG_DB: mcp
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_API_BASE: ${OPENAI_API_BASE}
+    ports:
+      - "8000:8000"
+    networks:
+      - mcpnet
+    command: ["python3", "main.py"]
+
+volumes:
+  pgdata:
+
+networks:
+  mcpnet:
+    driver: bridge 

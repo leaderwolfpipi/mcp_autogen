@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UI修复效果演示</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f8fafc;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .mermaid-container {
+            width: 100%;
+            max-width: 100%;
+            margin: 16px 0;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        .mermaid-diagram {
+            width: 100%;
+            min-width: 500px;
+            height: auto;
+            min-height: 150px;
+            display: block;
+            background: #fafbfc;
+            border-radius: 4px;
+            padding: 20px;
+            overflow: visible;
+            text-align: center;
+        }
+        .mermaid-diagram svg {
+            width: auto !important;
+            height: auto !important;
+            min-width: 400px !important;
+            max-width: none !important;
+            max-height: 200px !important;
+            display: block !important;
+            margin: 0 auto !important;
+            transform: none !important;
+            position: static !important;
+        }
+        .final-result {
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px;
+            margin-top: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .final-result h2 {
+            font-size: 1.5em;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .final-result h3 {
+            font-size: 1.2em;
+            margin: 20px 0 12px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .final-result strong {
+            color: #f8fafc;
+            font-weight: 600;
+        }
+        .search-result-item {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 12px;
+            margin: 8px 0;
+            border-left: 4px solid rgba(255, 255, 255, 0.3);
+        }
+        .search-result-title {
+            font-weight: 600;
+            font-size: 1.1em;
+            margin-bottom: 4px;
+        }
+        .search-result-url {
+            font-size: 0.9em;
+            opacity: 0.8;
+            margin-bottom: 6px;
+        }
+        .search-result-snippet {
+            font-size: 0.95em;
+            line-height: 1.4;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 UI修复效果演示</h1>
+        
+        <h2>1. 改进的Mermaid流程图</h2>
+        <div class="mermaid-container">
+            <div class="mermaid-diagram" id="mermaid-demo">
+                <!-- Mermaid图表将在这里渲染 -->
+            </div>
+        </div>
+        
+        <h2>2. 改进的最终结果显示</h2>
+        <div class="final-result">
+            <h2>✅ 任务执行完成</h2>
+            <p><strong>总执行时间</strong>: 5.38秒</p>
+            
+            <h3>🎯 最终结果</h3>
+            <p>📊 <strong>找到 3 个相关结果：</strong></p>
+            
+            <div class="search-result-item">
+                <div class="search-result-title">1. 李鸿章 - 维基百科</div>
+                <div class="search-result-url">🔗 链接: https://zh.wikipedia.org/wiki/李鸿章</div>
+                <div class="search-result-snippet">📄 摘要: 李鸿章（1823年2月15日－1901年11月7日），字少荃，号仪叟，谥文忠，安徽合肥人，晚清名臣，洋务运动的主要领导人之一，与曾国藩、张之洞、左宗棠并称为"中兴四大名臣"。</div>
+            </div>
+            
+            <div class="search-result-item">
+                <div class="search-result-title">2. 李鸿章的历史功过评价</div>
+                <div class="search-result-url">🔗 链接: https://example.com/li-hongzhang-evaluation</div>
+                <div class="search-result-snippet">📄 摘要: 李鸿章作为晚清重臣，在洋务运动中发挥了重要作用，但也因签订多项不平等条约而备受争议。他的一生体现了中国近代史的复杂性和矛盾性。</div>
+            </div>
+            
+            <div class="search-result-item">
+                <div class="search-result-title">3. 洋务运动与李鸿章的贡献</div>
+                <div class="search-result-url">🔗 链接: https://example.com/westernization-movement</div>
+                <div class="search-result-snippet">📄 摘要: 李鸿章在洋务运动期间创办了多家军工企业和民用企业，包括江南制造总局、轮船招商局等，为中国近代工业的发展奠定了基础。</div>
+            </div>
+        </div>
+        
+        <div style="margin-top: 20px; padding: 16px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #0ea5e9;">
+            <h3>🎉 修复总结</h3>
+            <ul>
+                <li><strong>流程图优化</strong>: 改进了Mermaid图表的布局、样式和渲染逻辑，确保完整显示</li>
+                <li><strong>最终结果增强</strong>: 显示具体的搜索结果内容，而不仅仅是执行状态</li>
+                <li><strong>视觉改进</strong>: 更好的颜色搭配、间距和排版，提升用户体验</li>
+                <li><strong>响应式设计</strong>: 确保在不同屏幕尺寸下都能正确显示</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // 彻底重构的Mermaid初始化
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'default',
+            flowchart: {
+                htmlLabels: true,
+                curve: 'basis',
+                padding: 20,
+                nodeSpacing: 50,
+                rankSpacing: 80,
+                useMaxWidth: false // 关键：不限制宽度
+            },
+            themeVariables: {
+                primaryColor: '#4f46e5',
+                primaryTextColor: '#1e293b',
+                primaryBorderColor: '#6366f1',
+                lineColor: '#64748b',
+                secondaryColor: '#e0e7ff',
+                tertiaryColor: '#f8fafc'
+            }
+        });
+
+        // 保持横向布局的图表
+        const mermaidCode = `
+graph LR
+    Start([开始]) --> Node1["smart_search"]
+    Node1 --> End([✅ 完成])
+    
+    classDef successNode fill:#d4edda,stroke:#155724,stroke-width:1px;
+    classDef startEnd fill:#e2e3e5,stroke:#383d41,stroke-width:1px;
+    
+    class Node1 successNode;
+    class Start,End startEnd;
+        `;
+
+        // 简化的渲染逻辑
+        mermaid.render('mermaid-demo-svg', mermaidCode).then(({ svg }) => {
+            const element = document.getElementById('mermaid-demo')
+            
+            // 简化处理：直接插入SVG，不做过多干预
+            element.innerHTML = svg
+            
+            // 只做最基础的样式调整
+            const svgElement = element.querySelector('svg')
+            if (svgElement) {
+                // 只设置必要的样式，保持原始尺寸
+                svgElement.style.display = 'block'
+                svgElement.style.margin = '0 auto'
+                svgElement.style.maxHeight = '200px'
+                
+                // 如果SVG有固定宽度属性，移除它们
+                if (svgElement.getAttribute('width')) {
+                    svgElement.removeAttribute('width')
+                }
+                if (svgElement.getAttribute('height')) {
+                    svgElement.removeAttribute('height')
+                }
+                
+                // 确保有合适的viewBox
+                if (!svgElement.getAttribute('viewBox')) {
+                    try {
+                        const bbox = svgElement.getBBox()
+                        svgElement.setAttribute('viewBox', `0 0 ${bbox.width + 40} ${bbox.height + 40}`)
+                    } catch (e) {
+                        // 如果getBBox失败，使用默认值
+                        svgElement.setAttribute('viewBox', '0 0 500 200')
+                    }
+                }
+            }
+        }).catch(console.error);
+    </script>
+</body>
+</html> 

@@ -1,0 +1,14 @@
+pyyaml
+openai
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+Pillow
+python-dotenv
+pytesseract
+websockets
+requests
+python-dotenv
+cachetools
+pydantic

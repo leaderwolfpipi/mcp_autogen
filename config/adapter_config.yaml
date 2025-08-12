@@ -1,0 +1,57 @@
+# 工具适配器配置文件
+# 用于配置适配器的各种参数和行为
+
+# 分析配置
+max_analysis_depth: 3          # 最大分析深度
+similarity_threshold: 0.3      # 相似度阈值
+
+# 缓存配置
+enable_caching: true           # 启用缓存
+cache_size: 1000              # 缓存大小
+
+# 性能配置
+enable_parallel: false        # 启用并行处理
+max_workers: 4                # 最大工作线程数
+timeout: 30.0                 # 超时时间（秒）
+retry_count: 3                # 重试次数
+
+# 日志配置
+log_level: INFO               # 日志级别
+
+# 自定义映射规则
+custom_rules:
+  - source_pattern: "*.image_list"
+    target_pattern: "*.images"
+    transformation: "list_to_array"
+    priority: 5
+  
+  - source_pattern: "*.data"
+    target_pattern: "*.content"
+    transformation: "identity"
+    priority: 10
+
+# 自定义转换器
+custom_transformers:
+  image_to_path:
+    description: "将PIL Image对象转换为文件路径"
+    code: |
+      def image_to_path(data):
+          if hasattr(data, 'save'):
+              import tempfile
+              import os
+              temp_path = tempfile.mktemp(suffix='.png')
+              data.save(temp_path)
+              return temp_path
+          return data
+  
+  normalize_list:
+    description: "标准化列表格式"
+    code: |
+      def normalize_list(data):
+          if isinstance(data, list):
+              return data
+          elif isinstance(data, (str, int, float)):
+              return [data]
+          elif isinstance(data, dict):
+              return list(data.values())
+          return data 

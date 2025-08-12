@@ -1,0 +1,10 @@
+tools:
+  - id: text_translator
+    description: "Multi-language text translation"
+    input_type: text
+    output_type: text
+    params: { source_lang: str, target_lang: str }
+  - id: image_upscaler
+    description: "4x image resolution enhancement"
+    input_type: image
+    output_type: image

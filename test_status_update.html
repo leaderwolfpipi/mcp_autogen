@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>动态状态更新测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .input-section {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        #messageInput {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .messages {
+            min-height: 400px;
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 15px;
+            background: #fafafa;
+        }
+        .message {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+            background: white;
+        }
+        .message.user {
+            border-left-color: #28a745;
+            text-align: right;
+        }
+        .message.assistant {
+            border-left-color: #007bff;
+        }
+        .message.system {
+            border-left-color: #ffc107;
+            background: #fff3cd;
+        }
+        .message.error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .execution-plan {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            border: 2px solid #6c757d;
+        }
+        .step-status {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 8px;
+            text-align: center;
+            line-height: 20px;
+            color: white;
+            font-size: 12px;
+        }
+        .step-status.pending {
+            background: #6c757d;
+        }
+        .step-status.running {
+            background: #ffc107;
+            animation: pulse 1s infinite;
+        }
+        .step-status.success {
+            background: #28a745;
+        }
+        .step-status.error {
+            background: #dc3545;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 动态状态更新测试</h1>
+        <div id="connectionStatus" class="status disconnected">未连接</div>
+        <div class="input-section">
+            <input type="text" id="messageInput" placeholder="输入测试消息..." value="搜索北京的天气">
+            <button id="sendButton" onclick="sendMessage()" disabled>发送</button>
+            <button onclick="connectWebSocket()">连接</button>
+            <button onclick="disconnectWebSocket()">断开</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h3>📊 实时消息</h3>
+        <div id="messages" class="messages"></div>
+    </div>
+
+    <div class="container">
+        <h3>🔧 当前执行计划</h3>
+        <div id="executionPlan" class="execution-plan">等待任务开始...</div>
+    </div>
+
+    <script>
+        let websocket = null;
+        let isConnected = false;
+        let currentPlan = null;
+
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const url = `${protocol}//localhost:8000/ws/mcp/chat`;
+            
+            websocket = new WebSocket(url);
+            
+            websocket.onopen = function() {
+                isConnected = true;
+                updateStatus('已连接', 'connected');
+                document.getElementById('sendButton').disabled = false;
+                addMessage('system', '🔌 WebSocket连接已建立');
+            };
+            
+            websocket.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                handleMessage(data);
+            };
+            
+            websocket.onclose = function() {
+                isConnected = false;
+                updateStatus('连接断开', 'disconnected');
+                document.getElementById('sendButton').disabled = true;
+                addMessage('system', '🔌 WebSocket连接已断开');
+            };
+            
+            websocket.onerror = function(error) {
+                addMessage('error', `连接错误: ${error}`);
+            };
+        }
+
+        function disconnectWebSocket() {
+            if (websocket) {
+                websocket.close();
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message || !isConnected) {
+                return;
+            }
+            
+            addMessage('user', message);
+            
+            websocket.send(JSON.stringify({
+                user_input: message,
+                session_id: 'test_session_' + Date.now()
+            }));
+            
+            input.value = '';
+        }
+
+        function handleMessage(data) {
+            console.log('📨 收到消息:', data);
+            
+            switch(data.type) {
+                case 'mode_detection':
+                    addMessage('system', `🎯 模式检测: ${data.mode} - ${data.message}`);
+                    break;
+                    
+                case 'task_planning':
+                    addMessage('system', `🧠 ${data.message}`);
+                    break;
+                    
+                case 'task_start':
+                    addMessage('assistant', `🚀 ${data.message}`);
+                    if (data.plan) {
+                        currentPlan = data.plan;
+                        updateExecutionPlan();
+                    }
+                    break;
+                    
+                case 'tool_start':
+                    addMessage('system', `⚙️ ${data.message} (${data.tool_name})`);
+                    if (currentPlan) {
+                        updateStepStatus(data.step_id || data.tool_name, 'running');
+                    }
+                    break;
+                    
+                case 'tool_result':
+                    const stepData = data.step_data;
+                    const status = stepData.status === 'success' ? '✅' : '❌';
+                    addMessage('system', `${status} ${stepData.tool_name} - ${stepData.status}`);
+                    if (currentPlan) {
+                        updateStepStatus(stepData.id || stepData.tool_name, stepData.status);
+                    }
+                    break;
+                    
+                case 'task_complete':
+                    addMessage('assistant', `🎉 ${data.message}`);
+                    if (data.plan) {
+                        currentPlan = data.plan;
+                        updateExecutionPlan();
+                    }
+                    break;
+                    
+                case 'chat_response':
+                    addMessage('assistant', `💬 ${data.message}`);
+                    break;
+                    
+                case 'error':
+                    addMessage('error', `❌ ${data.message}`);
+                    break;
+                    
+                default:
+                    addMessage('system', `🔍 ${data.type}: ${JSON.stringify(data)}`);
+                    break;
+            }
+        }
+
+        function addMessage(type, content) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.innerHTML = `<small>${new Date().toLocaleTimeString()}</small><br>${content}`;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function updateStatus(text, type) {
+            const statusDiv = document.getElementById('connectionStatus');
+            statusDiv.textContent = text;
+            statusDiv.className = `status ${type}`;
+        }
+
+        function updateExecutionPlan() {
+            if (!currentPlan) return;
+            
+            const planDiv = document.getElementById('executionPlan');
+            let planHtml = `<strong>任务:</strong> ${currentPlan.query || '未知'}<br><br>`;
+            planHtml += `<strong>执行步骤:</strong><br>`;
+            
+            if (currentPlan.steps && currentPlan.steps.length > 0) {
+                currentPlan.steps.forEach((step, index) => {
+                    const status = step.status || 'pending';
+                    planHtml += `<div style="margin: 5px 0;">`;
+                    planHtml += `<span class="step-status ${status}">`;
+                    planHtml += status === 'success' ? '✓' : 
+                               status === 'error' ? '✗' : 
+                               status === 'running' ? '⟳' : '○';
+                    planHtml += `</span>`;
+                    planHtml += `${index + 1}. ${step.tool_name || step.description || 'Unknown'}`;
+                    if (step.execution_time) {
+                        planHtml += ` (${step.execution_time.toFixed(2)}s)`;
+                    }
+                    planHtml += `</div>`;
+                });
+            } else {
+                planHtml += `<em>暂无步骤信息</em>`;
+            }
+            
+            planDiv.innerHTML = planHtml;
+        }
+
+        function updateStepStatus(stepId, status) {
+            if (!currentPlan || !currentPlan.steps) return;
+            
+            const step = currentPlan.steps.find(s => 
+                s.id === stepId || s.tool_name === stepId
+            );
+            
+            if (step) {
+                step.status = status;
+                updateExecutionPlan();
+            }
+        }
+
+        // 按回车键发送消息
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && isConnected) {
+                sendMessage();
+            }
+        });
+
+        // 页面加载时自动连接
+        window.addEventListener('load', function() {
+            connectWebSocket();
+        });
+    </script>
+</body>
+</html> 

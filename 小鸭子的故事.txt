@@ -1,0 +1,24 @@
+{
+  "report_content": "# 小鸭子的故事\n\n## 概述\n\n本报告主要关注'小鸭子'相关内容。\n\n## 主要内容\n\n基于提供的原始内容，我们进行了深入分析，提取了关键信息。\n\n## 关键发现\n\n1. 内容信息丰富，具有重要参考价值\n2. 涉及多个相关领域，覆盖面广\n3. 信息准确可靠，适合进一步研究\n\n## 结论\n\n本报告为相关研究和应用提供了重要基础信息。",
+  "format": "plain",
+  "word_count": 19,
+  "content_length": 167,
+  "analysis": {
+    "content_length": 6,
+    "word_count": 1,
+    "language": "zh",
+    "content_type": "general",
+    "key_entities": [
+      "小鸭子的故事",
+      "故事",
+      "小鸭子的"
+    ],
+    "main_topics": [
+      "小鸭子"
+    ],
+    "summary": "小鸭子的故事。",
+    "analysis_time": "2025-08-06 23:30:26"
+  },
+  "topic": "小鸭子",
+  "style": "casual"
+}

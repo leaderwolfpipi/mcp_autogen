@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP AutoGen 任务执行器</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background-color: #f5f5f5;
+        }
+        .container { 
+            max-width: 1000px; 
+            margin: 0 auto; 
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        .input-section {
+            padding: 30px;
+            border-bottom: 1px solid #eee;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        textarea { 
+            width: 100%; 
+            height: 120px; 
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: inherit;
+            resize: vertical;
+            transition: border-color 0.3s;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+        button { 
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #218838;
+        }
+        .status-bar {
+            padding: 15px 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #dc3545;
+        }
+        .status-dot.connected {
+            background: #28a745;
+        }
+        .output-section {
+            padding: 30px;
+            min-height: 400px;
+        }
+        .output { 
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            height: 500px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        .message {
+            margin: 12px 0;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border-left: 4px solid #ddd;
+            background: white;
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .message.chat {
+            border-left-color: #17a2b8;
+            background: #f0f9ff;
+        }
+        .message.task {
+            border-left-color: #6f42c1;
+            background: #f8f0ff;
+        }
+        .message.error {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+        .message.success {
+            border-left-color: #28a745;
+            background: #f0fff4;
+        }
+        .message.progress {
+            border-left-color: #ffc107;
+            background: #fffbf0;
+        }
+        .message-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        .message-time {
+            font-size: 0.8em;
+            color: #999;
+        }
+        .message-content {
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+        .examples {
+            margin-top: 15px;
+        }
+        .example-tag {
+            display: inline-block;
+            background: #e9ecef;
+            color: #495057;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            margin: 4px 4px 4px 0;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .example-tag:hover {
+            background: #dee2e6;
+        }
+        .mermaid-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #e9ecef;
+        }
+        .step-info {
+            background: rgba(0,0,0,0.05);
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin: 8px 0;
+            font-size: 0.9em;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 MCP AutoGen</h1>
+            <p>智能任务执行器 - 基于TaskEngine的新一代MCP系统</p>
+        </div>
+        
+        <div class="input-section">
+            <div class="input-group">
+                <label for="taskInput">📝 任务描述</label>
+                <textarea id="taskInput" placeholder="请输入您的任务或问题...&#10;&#10;💡 示例：&#10;• 帮我搜索北京的天气情况&#10;• 翻译这段话：Hello, how are you?&#10;• 搜索最新的AI技术新闻&#10;• 你好，今天过得怎么样？"></textarea>
+            </div>
+            
+            <div class="examples">
+                <strong>🔥 热门示例：</strong>
+                <span class="example-tag" onclick="setExample('帮我搜索北京的天气情况')">🌤️ 天气查询</span>
+                <span class="example-tag" onclick="setExample('翻译这段话：Hello, how are you today?')">🌐 文本翻译</span>
+                <span class="example-tag" onclick="setExample('搜索最新的人工智能技术新闻')">📰 新闻搜索</span>
+                <span class="example-tag" onclick="setExample('你好，今天过得怎么样？')">💬 闲聊对话</span>
+            </div>
+            
+            <div class="button-group">
+                <button class="btn-primary" onclick="execute()">🚀 执行任务</button>
+                <button class="btn-success" onclick="connect()">🔌 连接WebSocket</button>
+                <button class="btn-secondary" onclick="clear()">🗑️ 清空日志</button>
+            </div>
+        </div>
+        
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="status">未连接</span>
+            </div>
+            <div id="executionInfo"></div>
+        </div>
+        
+        <div class="output-section">
+            <div class="output" id="output">
+                <div class="message progress">
+                    <div class="message-header">
+                        <strong>📋 系统提示</strong>
+                        <span class="message-time" id="initTime"></span>
+                    </div>
+                    <div class="message-content">欢迎使用 MCP AutoGen 任务执行器！
+
+🔧 支持的执行模式：
+• 💬 聊天模式：智能对话和问答
+• 🚀 任务模式：复杂工具调用和流水线执行
+• ❌ 错误处理：详细的错误信息和建议
+
+请输入您的任务描述，然后点击"执行任务"开始。</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let connected = false;
+        let executionStartTime = null;
+        let currentMermaidId = 0;
+        
+        // 初始化Mermaid
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+        
+        function setExample(text) {
+            document.getElementById('taskInput').value = text;
+        }
+        
+        function updateStatus(text, isConnected = false) {
+            document.getElementById('status').textContent = text;
+            const dot = document.getElementById('statusDot');
+            if (isConnected) {
+                dot.classList.add('connected');
+            } else {
+                dot.classList.remove('connected');
+            }
+        }
+        
+        function log(message, mode = 'progress', step = '', data = null) {
+            const output = document.getElementById('output');
+            const div = document.createElement('div');
+            div.className = `message ${mode}`;
+            
+            const time = new Date().toLocaleTimeString();
+            const stepText = step ? ` - ${step}` : '';
+            
+            let content = `<div class="message-header">
+                <strong>${getModeIcon(mode)} ${getModeTitle(mode)}${stepText}</strong>
+                <span class="message-time">${time}</span>
+            </div>
+            <div class="message-content">${formatMessage(message, data)}</div>`;
+            
+            div.innerHTML = content;
+            output.appendChild(div);
+            output.scrollTop = output.scrollHeight;
+            
+            // 处理Mermaid图表
+            if (data && data.mermaid) {
+                setTimeout(() => {
+                    renderMermaid(data.mermaid, div);
+                }, 100);
+            }
+        }
+        
+        function getModeIcon(mode) {
+            const icons = {
+                'chat': '💬',
+                'task': '🚀',
+                'error': '❌',
+                'success': '✅',
+                'progress': '⚡',
+                'info': 'ℹ️'
+            };
+            return icons[mode] || 'ℹ️';
+        }
+        
+        function getModeTitle(mode) {
+            const titles = {
+                'chat': '聊天回复',
+                'task': '任务执行',
+                'error': '执行错误',
+                'success': '执行成功',
+                'progress': '执行进度',
+                'info': '系统信息'
+            };
+            return titles[mode] || '消息';
+        }
+        
+        function formatMessage(message, data) {
+            // 处理Markdown格式
+            let formatted = message
+                .replace(/### (.*)/g, '<h4>$1</h4>')
+                .replace(/## (.*)/g, '<h3>$1</h3>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`(.*?)`/g, '<code>$1</code>');
+            
+            // 添加执行步骤信息
+            if (data) {
+                if (data.step_index !== undefined) {
+                    formatted += `<div class="step-info">
+                        📊 步骤 ${data.step_index + 1} | ⏱️ ${(data.execution_time || 0).toFixed(2)}秒 | 状态: ${data.status || 'unknown'}
+                    </div>`;
+                }
+                
+                if (data.total_steps) {
+                    formatted += `<div class="step-info">
+                        📈 总计 ${data.total_steps} 个步骤 | ✅ 成功 ${data.successful_steps || 0} 个
+                    </div>`;
+                }
+            }
+            
+            return formatted;
+        }
+        
+        function renderMermaid(mermaidCode, container) {
+            currentMermaidId++;
+            const mermaidId = `mermaid-${currentMermaidId}`;
+            
+            const mermaidDiv = document.createElement('div');
+            mermaidDiv.className = 'mermaid-container';
+            mermaidDiv.innerHTML = `<div id="${mermaidId}" class="mermaid">${mermaidCode}</div>`;
+            
+            container.appendChild(mermaidDiv);
+            
+            // 重新渲染Mermaid
+            mermaid.init(undefined, `#${mermaidId}`);
+        }
+        
+        function connect() {
+            if (connected) {
+                log('WebSocket已经连接', 'info');
+                return;
+            }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const url = `${protocol}//${window.location.host}/ws/execute_task`;
+            
+            ws = new WebSocket(url);
+            
+            ws.onopen = () => {
+                connected = true;
+                updateStatus('WebSocket已连接', true);
+                log('WebSocket连接成功，可以开始执行任务', 'success');
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    // 处理不同的执行模式
+                    if (data.mode === 'chat') {
+                        log(data.message, 'chat', '聊天完成', data.data);
+                        updateExecutionInfo(data.execution_time);
+                    } else if (data.mode === 'task') {
+                        if (data.step === 'pipeline_start') {
+                            executionStartTime = Date.now();
+                            log(data.message, 'task', '开始执行', data.data);
+                        } else if (data.step.startsWith('step_') || data.step.startsWith('node_')) {
+                            log(data.message, 'progress', '执行步骤', data.data);
+                        } else if (data.step === 'task_completed' || data.step === 'completed') {
+                            log(data.message, 'success', '任务完成', data.data);
+                            updateExecutionInfo(data.execution_time || data.data?.execution_time);
+                        }
+                    } else if (data.mode === 'error') {
+                        log(data.message, 'error', '执行失败', data.data);
+                        updateExecutionInfo(data.data?.execution_time);
+                    } else {
+                        // 兼容旧格式
+                        const mode = data.status === 'error' ? 'error' : 
+                                   data.status === 'success' ? 'success' : 'progress';
+                        log(data.message, mode, data.step, data.data);
+                    }
+                    
+                } catch (e) {
+                    log(`消息解析失败: ${e.message}`, 'error');
+                }
+            };
+            
+            ws.onclose = () => {
+                connected = false;
+                updateStatus('WebSocket连接断开', false);
+                log('WebSocket连接已断开', 'error');
+            };
+            
+            ws.onerror = (error) => {
+                log(`WebSocket连接错误: ${error}`, 'error');
+            };
+        }
+        
+        function execute() {
+            if (!connected) {
+                log('请先连接WebSocket', 'error');
+                connect();
+                return;
+            }
+            
+            const input = document.getElementById('taskInput').value.trim();
+            if (!input) {
+                log('请输入任务描述', 'error');
+                return;
+            }
+            
+            const payload = {
+                user_input: input,
+                input_data: null
+            };
+            
+            executionStartTime = Date.now();
+            ws.send(JSON.stringify(payload));
+            log(`开始执行任务: ${input}`, 'progress', '任务提交');
+            updateExecutionInfo(0, true);
+        }
+        
+        function updateExecutionInfo(executionTime, isRunning = false) {
+            const infoDiv = document.getElementById('executionInfo');
+            if (isRunning) {
+                infoDiv.textContent = '⏳ 执行中...';
+            } else if (executionTime !== undefined) {
+                infoDiv.textContent = `⏱️ 执行时间: ${executionTime.toFixed(2)}秒`;
+            } else {
+                infoDiv.textContent = '';
+            }
+        }
+        
+        function clear() {
+            document.getElementById('output').innerHTML = '';
+            document.getElementById('executionInfo').textContent = '';
+        }
+        
+        // 页面加载时初始化
+        window.onload = () => {
+            document.getElementById('initTime').textContent = new Date().toLocaleTimeString();
+            // 延迟自动连接，让用户看到界面
+            setTimeout(() => {
+                connect();
+            }, 1500);
+        };
+        
+        // 回车键执行
+        document.getElementById('taskInput').addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'Enter') {
+                execute();
+            }
+        });
+    </script>
+</body>
+</html> 

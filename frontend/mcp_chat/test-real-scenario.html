@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🧪 真实场景测试</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f8fafc;
+      line-height: 1.6;
+    }
+    
+    .test-container {
+      max-width: 1000px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      padding: 30px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    
+    .test-section {
+      margin-bottom: 30px;
+      padding: 20px;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+    }
+    
+    .test-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 15px;
+    }
+    
+    .test-controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    
+    button {
+      padding: 10px 20px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    button:hover {
+      background: #2563eb;
+    }
+    
+    button.success {
+      background: #10b981;
+    }
+    
+    button:hover.success {
+      background: #059669;
+    }
+    
+    .ascii-container {
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid #e2e8f0;
+    }
+    
+    .ascii-diagram pre {
+      margin: 0;
+      padding: 16px;
+      background: white;
+      border-radius: 8px;
+      font-family: 'SF Mono', 'Monaco', monospace;
+      font-size: 14px;
+      line-height: 1.8;
+      color: #374151;
+      border: 1px solid #e2e8f0;
+    }
+    
+    .log-container {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: 'SF Mono', monospace;
+      font-size: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 20px;
+    }
+    
+    .log-entry {
+      margin-bottom: 4px;
+    }
+    
+    .log-info { color: #60a5fa; }
+    .log-success { color: #34d399; }
+    .log-warning { color: #fbbf24; }
+    .log-error { color: #f87171; }
+    
+    .message-container {
+      background: #f8fafc;
+      border-radius: 8px;
+      padding: 15px;
+      margin: 10px 0;
+      border: 1px solid #e2e8f0;
+    }
+    
+    .message-header {
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 10px;
+    }
+    
+    .json-display {
+      background: #000;
+      color: #00ff00;
+      padding: 10px;
+      border-radius: 4px;
+      font-family: 'SF Mono', monospace;
+      font-size: 11px;
+      overflow-x: auto;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-container">
+    <div class="header">
+      <h1>🧪 真实场景测试</h1>
+      <p>模拟真实的WebSocket消息流，测试动态ASCII图表的完整过程</p>
+    </div>
+
+    <div class="test-section">
+      <div class="test-title">🎬 模拟完整执行流程</div>
+      <div class="test-controls">
+        <button onclick="simulateTaskStart()">1. 任务开始</button>
+        <button onclick="simulateToolStart()">2. 工具启动</button>
+        <button onclick="simulateToolComplete()" class="success">3. 工具完成</button>
+        <button onclick="simulateTaskComplete()" class="success">4. 任务完成</button>
+        <button onclick="runFullSimulation()">🚀 完整模拟</button>
+        <button onclick="resetTest()">🔄 重置</button>
+      </div>
+      
+      <div class="ascii-container">
+        <div class="ascii-diagram">
+          <pre id="ascii-output">    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         │
+         ▼
+    📋 准备就绪</pre>
+        </div>
+      </div>
+      
+      <div class="log-container" id="log-container"></div>
+    </div>
+
+    <div class="test-section">
+      <div class="test-title">📨 WebSocket 消息模拟</div>
+      
+      <div class="message-container">
+        <div class="message-header">onTaskStart 消息</div>
+        <div class="json-display" id="task-start-msg">等待模拟...</div>
+      </div>
+      
+      <div class="message-container">
+        <div class="message-header">onToolStart 消息</div>
+        <div class="json-display" id="tool-start-msg">等待模拟...</div>
+      </div>
+      
+      <div class="message-container">
+        <div class="message-header">onToolResult 消息</div>
+        <div class="json-display" id="tool-result-msg">等待模拟...</div>
+      </div>
+      
+      <div class="message-container">
+        <div class="message-header">onTaskComplete 消息</div>
+        <div class="json-display" id="task-complete-msg">等待模拟...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 模拟 ExecutionPlanManager
+    class RealScenarioExecutionPlanManager {
+      constructor() {
+        this.plan = null;
+        this.stepStates = new Map();
+      }
+
+      initPlan(plan) {
+        this.plan = plan;
+        this.stepStates.clear();
+        if (plan && plan.steps) {
+          plan.steps.forEach(step => {
+            this.stepStates.set(step.tool_name, 'pending');
+          });
+        }
+        this.log('info', `执行计划已初始化: ${plan?.steps?.length || 0} 个步骤`);
+      }
+
+      updateStepState(stepId, state) {
+        this.stepStates.set(stepId, state);
+        this.log('success', `步骤状态更新: ${stepId} -> ${state}`);
+      }
+
+      generateAsciiDiagram() {
+        if (!this.plan || !this.plan.steps || this.plan.steps.length === 0) {
+          return this.generateInitialDiagram();
+        }
+
+        let diagram = '';
+        
+        // 分析当前执行状态
+        const stepStates = this.analyzeStepStates();
+        const visibleSteps = this.getVisibleSteps(stepStates);
+        
+        // 构建基础结构
+        diagram += this.buildBasicStructure();
+        
+        // 如果有可见步骤，构建工具执行部分
+        if (visibleSteps.length > 0) {
+          diagram += this.buildToolsSection(visibleSteps);
+        }
+        
+        // 构建最终状态
+        diagram += this.buildFinalStatus(stepStates);
+        
+        return diagram;
+      }
+
+      generateInitialDiagram() {
+        return `    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         │
+         ▼
+    📋 准备就绪`;
+      }
+
+      analyzeStepStates() {
+        let currentRunningIndex = -1;
+        let lastCompletedIndex = -1;
+        let hasError = false;
+        let totalCompleted = 0;
+        
+        this.plan.steps.forEach((step, index) => {
+          const state = this.stepStates.get(step.tool_name) || 'pending';
+          
+          if (state === 'running') {
+            currentRunningIndex = index;
+          } else if (state === 'success') {
+            lastCompletedIndex = Math.max(lastCompletedIndex, index);
+            totalCompleted++;
+          } else if (state === 'error') {
+            hasError = true;
+            lastCompletedIndex = Math.max(lastCompletedIndex, index);
+          }
+        });
+        
+        const allCompleted = totalCompleted === this.plan.steps.length;
+        const hasRunning = currentRunningIndex >= 0;
+        
+        return {
+          currentRunningIndex,
+          lastCompletedIndex,
+          hasError,
+          allCompleted,
+          hasRunning,
+          totalCompleted
+        };
+      }
+
+      getVisibleSteps(stepStates) {
+        const { currentRunningIndex, lastCompletedIndex } = stepStates;
+        
+        let showUpToIndex = -1;
+        
+        if (currentRunningIndex >= 0) {
+          showUpToIndex = currentRunningIndex;
+        } else if (lastCompletedIndex >= 0) {
+          showUpToIndex = Math.min(lastCompletedIndex + 1, this.plan.steps.length - 1);
+        } else {
+          showUpToIndex = 0;
+        }
+        
+        return this.plan.steps.slice(0, showUpToIndex + 1);
+      }
+
+      buildBasicStructure() {
+        return `    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析\n`;
+      }
+
+      buildToolsSection(visibleSteps) {
+        let section = '';
+        
+        visibleSteps.forEach((step, index) => {
+          const state = this.stepStates.get(step.tool_name) || 'pending';
+          
+          const stateIcon = this.getStateIcon(state);
+          const toolIcon = this.getToolIcon(step.tool_name);
+          const toolName = this.getCleanToolName(step.tool_name);
+          const connectionLine = this.getConnectionLine(state);
+          
+          if (index === 0) {
+            section += `         │
+         ▼\n`;
+          }
+          
+          section += `  ${stateIcon} ${toolIcon} ${toolName}\n`;
+          
+          if (index < visibleSteps.length - 1) {
+            section += `         ${connectionLine}
+         ▼\n`;
+          } else {
+            section += `         ${connectionLine}
+         ▼\n`;
+          }
+        });
+        
+        return section;
+      }
+
+      buildFinalStatus(stepStates) {
+        const { allCompleted, hasError, hasRunning } = stepStates;
+        
+        if (allCompleted && !hasError) {
+          return `    ✅ 任务完成`;
+        } else if (hasError) {
+          return `    ⚠️ 部分完成`;
+        } else if (hasRunning) {
+          return `    🔄 执行中...`;
+        } else {
+          return `    ⏳ 准备输出`;
+        }
+      }
+
+      getStateIcon(state) {
+        const stateIcons = {
+          'pending': '⏳',
+          'running': '🔄',
+          'success': '✅',
+          'error': '❌'
+        };
+        return stateIcons[state] || '⏳';
+      }
+
+      getToolIcon(toolName) {
+        const toolIcons = {
+          'smart_search': '🔍',
+          'web_search': '🔍',
+          'minio_uploader': '📦',
+          'image_uploader': '🖼️'
+        };
+        return toolIcons[toolName] || '🔧';
+      }
+
+      getCleanToolName(toolName) {
+        const toolNameMap = {
+          'smart_search': 'Smart Search',
+          'web_search': 'Web Search',
+          'minio_uploader': 'MinIO Upload',
+          'image_uploader': 'Image Upload'
+        };
+        return toolNameMap[toolName] || toolName;
+      }
+
+      getConnectionLine(state) {
+        switch (state) {
+          case 'running':
+            return '┆┆┆';
+          case 'success':
+            return '│';
+          case 'error':
+            return '╋';
+          default:
+            return '┇';
+        }
+      }
+
+      log(level, message) {
+        const timestamp = new Date().toLocaleTimeString();
+        const logContainer = document.getElementById('log-container');
+        const logEntry = document.createElement('div');
+        logEntry.className = `log-entry log-${level}`;
+        logEntry.textContent = `[${timestamp}] ${message}`;
+        logContainer.appendChild(logEntry);
+        logContainer.scrollTop = logContainer.scrollHeight;
+      }
+    }
+
+    // 创建测试实例
+    const realManager = new RealScenarioExecutionPlanManager();
+
+    // 模拟WebSocket消息数据
+    const realWebSocketData = {
+      taskStart: {
+        message: "我正在分析您的查询并制定执行计划...",
+        asciiDiagram: null
+      },
+      toolStart: {
+        message: "正在执行智能搜索",
+        toolName: "smart_search"
+      },
+      toolResult: {
+        tool_name: "smart_search",
+        status: "success",
+        execution_time: 12.946070909500122,
+        output: {
+          status: "success",
+          data: {
+            primary: [
+              { title: "李自成的一生", snippet: "李自成在西安称帝..." }
+            ]
+          }
+        }
+      },
+      taskComplete: {
+        message: "李自成（1606年－1645年），是明末著名的农民起义领袖...",
+        executionTime: 23.494345903396606,
+        steps: [
+          {
+            tool_name: "smart_search",
+            input_params: {
+              query: "李自成何许人也",
+              max_results: 5
+            },
+            output: {
+              status: "success",
+              data: { /* ... 实际输出数据 ... */ }
+            },
+            execution_time: 12.946070909500122,
+            status: "success"
+          }
+        ]
+      }
+    };
+
+    // 模拟函数
+    function simulateTaskStart() {
+      const data = realWebSocketData.taskStart;
+      document.getElementById('task-start-msg').textContent = JSON.stringify(data, null, 2);
+      
+      realManager.log('info', '🎬 模拟 onTaskStart');
+      // 这里不初始化计划，等待 taskComplete 时的真实数据
+      updateDisplay();
+    }
+
+    function simulateToolStart() {
+      const data = realWebSocketData.toolStart;
+      document.getElementById('tool-start-msg').textContent = JSON.stringify(data, null, 2);
+      
+      realManager.log('info', '🔧 模拟 onToolStart');
+      
+      // 先创建一个临时计划（模拟从文本解析失败的场景）
+      if (!realManager.plan) {
+        const tempPlan = {
+          steps: [{ tool_name: 'smart_search', description: '智能搜索' }]
+        };
+        realManager.initPlan(tempPlan);
+      }
+      
+      realManager.updateStepState(data.toolName, 'running');
+      updateDisplay();
+    }
+
+    function simulateToolComplete() {
+      const data = realWebSocketData.toolResult;
+      document.getElementById('tool-result-msg').textContent = JSON.stringify(data, null, 2);
+      
+      realManager.log('info', '✅ 模拟 onToolResult');
+      realManager.updateStepState(data.tool_name, data.status);
+      updateDisplay();
+    }
+
+    function simulateTaskComplete() {
+      const data = realWebSocketData.taskComplete;
+      document.getElementById('task-complete-msg').textContent = JSON.stringify({
+        message: data.message.substring(0, 100) + '...',
+        executionTime: data.executionTime,
+        steps: data.steps
+      }, null, 2);
+      
+      realManager.log('info', '🏁 模拟 onTaskComplete');
+      
+      // 这里是关键：使用真实的steps数据重新初始化计划
+      if (data.steps && data.steps.length > 0) {
+        realManager.log('success', '🔄 使用真实steps数据重新初始化');
+        const realPlan = { steps: data.steps };
+        realManager.initPlan(realPlan);
+        
+        // 将所有步骤标记为完成
+        for (const step of data.steps) {
+          realManager.updateStepState(step.tool_name, step.status);
+        }
+      }
+      
+      updateDisplay();
+    }
+
+    function runFullSimulation() {
+      realManager.log('info', '🚀 开始完整模拟');
+      
+      setTimeout(() => simulateTaskStart(), 500);
+      setTimeout(() => simulateToolStart(), 1500);
+      setTimeout(() => simulateToolComplete(), 3000);
+      setTimeout(() => simulateTaskComplete(), 4000);
+    }
+
+    function resetTest() {
+      realManager.plan = null;
+      realManager.stepStates.clear();
+      updateDisplay();
+      document.getElementById('log-container').innerHTML = '';
+      
+      // 清空消息显示
+      document.getElementById('task-start-msg').textContent = '等待模拟...';
+      document.getElementById('tool-start-msg').textContent = '等待模拟...';
+      document.getElementById('tool-result-msg').textContent = '等待模拟...';
+      document.getElementById('task-complete-msg').textContent = '等待模拟...';
+    }
+
+    function updateDisplay() {
+      const diagram = realManager.generateAsciiDiagram();
+      document.getElementById('ascii-output').textContent = diagram;
+      realManager.log('info', '📊 ASCII图表已更新');
+    }
+
+    // 页面加载完成
+    window.onload = function() {
+      realManager.log('info', '🧪 真实场景测试环境初始化完成');
+    };
+  </script>
+</body>
+</html> 

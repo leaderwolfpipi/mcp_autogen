@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>流式接口修复测试</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .header {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .test-section {
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .test-section h4 {
+            margin: 0 0 10px 0;
+            color: #495057;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .input-group input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        .btn:hover {
+            opacity: 0.8;
+        }
+        .status {
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-weight: 600;
+        }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .response-area {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 15px;
+            min-height: 100px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .streaming-log {
+            background: #000;
+            color: #0f0;
+            border-radius: 6px;
+            padding: 15px;
+            min-height: 200px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            overflow-y: auto;
+            max-height: 400px;
+        }
+        .log-entry {
+            margin: 2px 0;
+        }
+        .log-entry.mode-detection { color: #ffd700; }
+        .log-entry.chat-start { color: #87ceeb; }
+        .log-entry.chat-response { color: #98fb98; }
+        .log-entry.error { color: #ff6b6b; }
+        .log-entry.task-start { color: #ffa500; }
+        .log-entry.tool-start { color: #dda0dd; }
+        .log-entry.tool-result { color: #90ee90; }
+        .log-entry.task-complete { color: #00ff00; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔧 流式接口修复测试</h1>
+        <p>测试WebSocket流式响应功能</p>
+    </div>
+
+    <div class="container">
+        <h3>🧪 测试区域</h3>
+        
+        <div class="test-section">
+            <h4>1. 闲聊模式测试</h4>
+            <div class="input-group">
+                <input type="text" id="chatInput" placeholder="输入闲聊消息..." value="你好">
+                <button class="btn btn-primary" onclick="testChat()">测试闲聊</button>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h4>2. 任务模式测试</h4>
+            <div class="input-group">
+                <input type="text" id="taskInput" placeholder="输入任务请求..." value="帮我搜索北京的天气">
+                <button class="btn btn-success" onclick="testTask()">测试任务</button>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h4>3. 连接状态</h4>
+            <div id="connectionStatus" class="status info">未连接</div>
+            <button class="btn btn-primary" onclick="connectWebSocket()">连接WebSocket</button>
+            <button class="btn btn-primary" onclick="disconnectWebSocket()">断开连接</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h3>📊 流式响应日志</h3>
+        <div id="streamingLog" class="streaming-log">等待连接...</div>
+        <button class="btn btn-primary" onclick="clearLog()">清空日志</button>
+    </div>
+
+    <div class="container">
+        <h3>📋 最新响应</h3>
+        <div id="latestResponse" class="response-area">等待响应...</div>
+    </div>
+
+    <script>
+        let ws = null;
+        let logContainer = document.getElementById('streamingLog');
+        let responseContainer = document.getElementById('latestResponse');
+        let statusContainer = document.getElementById('connectionStatus');
+
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function updateStatus(message, type) {
+            statusContainer.textContent = message;
+            statusContainer.className = `status ${type}`;
+        }
+
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                addLog('WebSocket已经连接', 'info');
+                return;
+            }
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws/mcp/standard`);
+
+            ws.onopen = function() {
+                addLog('✅ WebSocket连接已建立', 'success');
+                updateStatus('🟢 已连接', 'success');
+            };
+
+            ws.onmessage = function(event) {
+                const response = JSON.parse(event.data);
+                handleStreamingResponse(response);
+            };
+
+            ws.onclose = function() {
+                addLog('🔌 WebSocket连接已关闭', 'info');
+                updateStatus('🔴 已断开', 'error');
+            };
+
+            ws.onerror = function(error) {
+                addLog('❌ WebSocket连接错误', 'error');
+                updateStatus('❌ 连接错误', 'error');
+            };
+        }
+
+        function disconnectWebSocket() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function handleStreamingResponse(response) {
+            // 显示完整响应
+            responseContainer.textContent = JSON.stringify(response, null, 2);
+
+            const responseType = response.type || 'unknown';
+            const message = response.message || '无消息';
+
+            switch(responseType) {
+                case 'mode_detection':
+                    addLog(`🎯 模式检测: ${message}`, 'mode-detection');
+                    break;
+                case 'chat_start':
+                    addLog(`💬 开始聊天: ${message}`, 'chat-start');
+                    break;
+                case 'chat_response':
+                    addLog(`✅ 聊天回复: ${message.substring(0, 50)}...`, 'chat-response');
+                    break;
+                case 'task_start':
+                    addLog(`🚀 任务开始: ${message}`, 'task-start');
+                    break;
+                case 'tool_start':
+                    addLog(`🔧 工具启动: ${message}`, 'tool-start');
+                    break;
+                case 'tool_result':
+                    addLog(`✅ 工具结果: ${message}`, 'tool-result');
+                    break;
+                case 'tool_error':
+                    addLog(`❌ 工具错误: ${response.error}`, 'error');
+                    break;
+                case 'task_complete':
+                    addLog(`🎉 任务完成: ${message.substring(0, 50)}...`, 'task-complete');
+                    break;
+                case 'error':
+                    addLog(`❌ 错误: ${message}`, 'error');
+                    break;
+                default:
+                    if (response.status) {
+                        addLog(`📋 标准响应: ${response.status}`, 'info');
+                    } else {
+                        addLog(`❓ 未知响应: ${responseType}`, 'info');
+                    }
+            }
+        }
+
+        function sendMessage(message) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addLog('❌ WebSocket未连接，请先连接', 'error');
+                return;
+            }
+
+            const request = {
+                mcp_version: "1.0",
+                session_id: null,
+                request_id: generateUUID(),
+                user_query: message,
+                context: {}
+            };
+
+            addLog(`📤 发送请求: ${message}`, 'info');
+            ws.send(JSON.stringify(request));
+        }
+
+        function testChat() {
+            const message = document.getElementById('chatInput').value;
+            if (!message.trim()) {
+                addLog('❌ 请输入聊天消息', 'error');
+                return;
+            }
+            sendMessage(message);
+        }
+
+        function testTask() {
+            const message = document.getElementById('taskInput').value;
+            if (!message.trim()) {
+                addLog('❌ 请输入任务请求', 'error');
+                return;
+            }
+            sendMessage(message);
+        }
+
+        function clearLog() {
+            logContainer.innerHTML = '';
+            addLog('日志已清空', 'info');
+        }
+
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = Math.random() * 16 | 0;
+                const v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        // 页面加载后自动连接
+        document.addEventListener('DOMContentLoaded', function() {
+            addLog('页面加载完成，准备连接WebSocket...', 'info');
+            setTimeout(connectWebSocket, 1000);
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>防闪烁效果测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        .test-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .test-description {
+            color: #666;
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+        .test-button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        .test-button:hover {
+            background: #0056CC;
+        }
+        .test-result {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 4px solid #007AFF;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .chat-simulator {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            height: 400px;
+            overflow-y: auto;
+            padding: 20px;
+            background: #fafafa;
+            margin-top: 20px;
+        }
+        .message {
+            margin-bottom: 16px;
+            padding: 12px;
+            border-radius: 8px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .user-message {
+            background: #007AFF;
+            color: white;
+            margin-left: auto;
+        }
+        .ai-message {
+            background: white;
+            border: 1px solid #e0e0e0;
+        }
+        .flicker-detector {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #333;
+            color: white;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            z-index: 1000;
+        }
+        .flicker-count {
+            font-weight: bold;
+            color: #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <div class="flicker-detector">
+        <div>闪烁检测器</div>
+        <div>检测次数: <span class="flicker-count" id="flickerCount">0</span></div>
+    </div>
+
+    <div class="test-container">
+        <h1>防闪烁效果测试</h1>
+        
+        <div class="test-section">
+            <div class="test-title">1. 消息闪烁检测</div>
+            <div class="test-description">
+                实时检测消息是否出现闪烁现象。优化后的版本应该将闪烁次数降到最低。
+            </div>
+            <button class="test-button" onclick="startFlickerDetection()">开始检测</button>
+            <button class="test-button" onclick="resetFlickerCount()">重置计数</button>
+            <div id="flicker-result" class="test-result" style="display: none;"></div>
+        </div>
+
+        <div class="test-section">
+            <div class="test-title">2. 消息发送模拟</div>
+            <div class="test-description">
+                模拟用户发送消息和AI回复的过程，观察是否有闪烁现象。
+            </div>
+            <button class="test-button" onclick="simulateMessageSend()">模拟发送消息</button>
+            <button class="test-button" onclick="simulateStreamingResponse()">模拟流式回复</button>
+            <button class="test-button" onclick="clearChat()">清空聊天</button>
+            <div id="simulation-result" class="test-result" style="display: none;"></div>
+        </div>
+
+        <div class="test-section">
+            <div class="test-title">3. 聊天模拟器</div>
+            <div class="test-description">
+                实时聊天界面，观察消息的显示效果。
+            </div>
+            <div class="chat-simulator" id="chatSimulator">
+                <div class="message ai-message">
+                    🤖 你好！我是防闪烁测试助手，请开始测试吧～
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <div class="test-title">4. 性能测试</div>
+            <div class="test-description">
+                测试大量消息更新时的性能表现。
+            </div>
+            <button class="test-button" onclick="performanceTest()">性能测试</button>
+            <div id="performance-result" class="test-result" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        let flickerCount = 0;
+        let isDetecting = false;
+        let lastMessageCount = 0;
+        let lastMessageContent = '';
+
+        // 闪烁检测器
+        function startFlickerDetection() {
+            isDetecting = true;
+            const chatSimulator = document.getElementById('chatSimulator');
+            
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.type === 'childList') {
+                        const messages = chatSimulator.querySelectorAll('.message');
+                        const currentMessageCount = messages.length;
+                        
+                        // 检测消息数量变化
+                        if (currentMessageCount !== lastMessageCount) {
+                            lastMessageCount = currentMessageCount;
+                        }
+                        
+                        // 检测消息内容变化
+                        if (messages.length > 0) {
+                            const lastMessage = messages[messages.length - 1];
+                            const currentContent = lastMessage.textContent;
+                            
+                            if (currentContent !== lastMessageContent && lastMessageContent !== '') {
+                                // 检测到内容变化，可能是闪烁
+                                flickerCount++;
+                                updateFlickerCount();
+                            }
+                            
+                            lastMessageContent = currentContent;
+                        }
+                    }
+                });
+            });
+            
+            observer.observe(chatSimulator, {
+                childList: true,
+                subtree: true,
+                characterData: true
+            });
+            
+            showResult('flicker-result', 'success', '✅ 闪烁检测已启动');
+        }
+
+        function resetFlickerCount() {
+            flickerCount = 0;
+            updateFlickerCount();
+            showResult('flicker-result', 'success', '✅ 闪烁计数已重置');
+        }
+
+        function updateFlickerCount() {
+            document.getElementById('flickerCount').textContent = flickerCount;
+        }
+
+        // 消息发送模拟
+        function simulateMessageSend() {
+            const chatSimulator = document.getElementById('chatSimulator');
+            const userMessage = document.createElement('div');
+            userMessage.className = 'message user-message';
+            userMessage.textContent = '这是一条测试消息 ' + new Date().toLocaleTimeString();
+            
+            chatSimulator.appendChild(userMessage);
+            chatSimulator.scrollTop = chatSimulator.scrollHeight;
+            
+            showResult('simulation-result', 'success', '✅ 用户消息已发送');
+        }
+
+        function simulateStreamingResponse() {
+            const chatSimulator = document.getElementById('chatSimulator');
+            const aiMessage = document.createElement('div');
+            aiMessage.className = 'message ai-message';
+            aiMessage.textContent = '🤖 正在处理您的请求...';
+            
+            chatSimulator.appendChild(aiMessage);
+            chatSimulator.scrollTop = chatSimulator.scrollHeight;
+            
+            // 模拟流式更新
+            const streamingSteps = [
+                '🔌 正在连接服务器...',
+                '✅ 连接成功！正在发送任务...',
+                '🔄 正在导入工具集合...',
+                '🔄 正在使用智能Pipeline引擎执行任务...',
+                '🔄 工具 image_rotator 执行完成',
+                '🔄 智能Pipeline执行完成',
+                '✅ 任务执行完成！'
+            ];
+            
+            let stepIndex = 0;
+            const updateInterval = setInterval(() => {
+                if (stepIndex < streamingSteps.length) {
+                    aiMessage.textContent = streamingSteps[stepIndex];
+                    stepIndex++;
+                } else {
+                    clearInterval(updateInterval);
+                    showResult('simulation-result', 'success', '✅ 流式回复模拟完成');
+                }
+            }, 500);
+        }
+
+        function clearChat() {
+            const chatSimulator = document.getElementById('chatSimulator');
+            chatSimulator.innerHTML = '<div class="message ai-message">🤖 聊天已清空，请重新开始测试～</div>';
+            showResult('simulation-result', 'success', '✅ 聊天已清空');
+        }
+
+        // 性能测试
+        function performanceTest() {
+            const startTime = performance.now();
+            const chatSimulator = document.getElementById('chatSimulator');
+            
+            // 清空现有消息
+            chatSimulator.innerHTML = '';
+            
+            // 快速添加100条消息
+            for (let i = 0; i < 100; i++) {
+                const message = document.createElement('div');
+                message.className = i % 2 === 0 ? 'message user-message' : 'message ai-message';
+                message.textContent = `测试消息 ${i + 1}`;
+                chatSimulator.appendChild(message);
+            }
+            
+            const endTime = performance.now();
+            const duration = endTime - startTime;
+            
+            showResult('performance-result', 'success', `✅ 性能测试完成 - 100条消息耗时: ${duration.toFixed(2)}ms`);
+        }
+
+        function showResult(elementId, status, message) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.innerHTML = `
+                <span class="status ${status}">${status.toUpperCase()}</span>
+                <span style="margin-left: 10px;">${message}</span>
+            `;
+        }
+
+        // 页面加载完成
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('防闪烁测试页面已加载');
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>动态Mermaid图表测试</title>
+  <script src="https://unpkg.com/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f8fafc;
+    }
+    
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .test-section {
+      margin-bottom: 40px;
+      padding: 20px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+    }
+    
+    .mermaid-container {
+      width: 100%;
+      padding: 30px 20px;  /* 增加上下内边距 */
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+      margin: 16px 0;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+      overflow: visible;
+      position: relative;
+    }
+    
+    .mermaid-diagram {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 250px;  /* 增加最小高度 */
+      max-height: 500px;  /* 增加最大高度 */
+      overflow: visible;
+      position: relative;
+      padding: 20px;  /* 添加内边距 */
+    }
+    
+    .mermaid-diagram svg {
+      max-width: 95% !important;  /* 留出更多边距 */
+      max-height: 90% !important;
+      width: auto !important;
+      height: auto !important;
+      overflow: visible !important;
+      display: block !important;
+      margin: 0 auto !important;
+      padding: 10px !important;  /* 为SVG添加内边距 */
+    }
+    
+    /* 确保所有子元素都可见 */
+    .mermaid-diagram svg g,
+    .mermaid-diagram svg text,
+    .mermaid-diagram svg path,
+    .mermaid-diagram svg rect {
+      overflow: visible !important;
+    }
+    
+    /* Mermaid 动画效果 */
+    @keyframes dashFlow {
+      0% { stroke-dashoffset: 15; }
+      100% { stroke-dashoffset: 0; }
+    }
+    
+    @keyframes solidPulse {
+      0%, 100% { opacity: 1; stroke-width: 2px; }
+      50% { opacity: 0.7; stroke-width: 3px; }
+    }
+    
+    @keyframes runningNodePulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.05); opacity: 0.9; }
+    }
+    
+    @keyframes successNodeBounce {
+      0% { transform: scale(1); }
+      30% { transform: scale(1.15); }
+      50% { transform: scale(0.95); }
+      70% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+    
+    @keyframes errorNodeShake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-4px); }
+      75% { transform: translateX(4px); }
+    }
+    
+    .controls {
+      margin: 20px 0;
+      text-align: center;
+    }
+    
+    button {
+      margin: 0 10px;
+      padding: 8px 16px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    button:hover {
+      background: #2563eb;
+    }
+    
+    button:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎨 动态Mermaid图表测试</h1>
+    
+    <div class="controls">
+      <button onclick="showInitialState()">初始状态</button>
+      <button onclick="showRunningState()">执行中</button>
+      <button onclick="showCompletedState()">已完成</button>
+      <button onclick="showErrorState()">有错误</button>
+      <button onclick="simulateProgress()">模拟执行过程</button>
+    </div>
+    
+    <div class="test-section">
+      <h2>动态执行流程图</h2>
+      <div class="mermaid-container">
+        <div class="mermaid-diagram" id="dynamic-diagram"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 初始化Mermaid
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'default',
+      flowchart: {
+        useMaxWidth: false,
+        htmlLabels: true,
+        curve: 'basis',
+        padding: 20,
+        nodeSpacing: 60,
+        rankSpacing: 80,
+        diagramPadding: 20
+      },
+      themeVariables: {
+        fontSize: '14px',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        primaryColor: '#e0e7ff',
+        primaryTextColor: '#1e40af',
+        primaryBorderColor: '#3b82f6',
+        lineColor: '#6b7280',
+        sectionBkgColor: '#f8fafc',
+        altSectionBkgColor: '#f1f5f9',
+        gridColor: '#e2e8f0',
+        tertiaryColor: '#f8fafc'
+      }
+    });
+
+    // 渲染图表函数
+    async function renderDiagram(diagramCode) {
+      const container = document.getElementById('dynamic-diagram');
+      container.innerHTML = '';
+      
+      try {
+        const { svg } = await mermaid.render('dynamicChart-' + Date.now(), diagramCode);
+        container.innerHTML = svg;
+        
+        const svgElement = container.querySelector('svg');
+        if (svgElement) {
+          svgElement.style.maxWidth = '600px';
+          svgElement.style.maxHeight = '400px';
+          svgElement.style.width = 'auto';
+          svgElement.style.height = 'auto';
+          svgElement.style.display = 'block';
+          svgElement.style.margin = '0 auto';
+          
+          setTimeout(() => addAnimations(svgElement), 100);
+        }
+      } catch (error) {
+        container.innerHTML = `<div style="color: red; text-align: center;">渲染失败: ${error.message}</div>`;
+      }
+    }
+
+    // 添加动画效果
+    function addAnimations(svgElement) {
+      // 为连接线添加动画
+      const edges = svgElement.querySelectorAll('path.flowchart-link');
+      edges.forEach(edge => {
+        const strokeDasharray = edge.style.strokeDasharray || edge.getAttribute('stroke-dasharray');
+        const isRunning = strokeDasharray && strokeDasharray !== 'none';
+        
+        if (isRunning) {
+          edge.style.strokeDasharray = '10 5';
+          edge.style.strokeDashoffset = '15';
+          edge.style.animation = 'dashFlow 2s linear infinite';
+          edge.style.stroke = '#f59e0b';
+          edge.style.strokeWidth = '3px';
+        } else {
+          edge.style.animation = 'solidPulse 3s ease-in-out infinite';
+        }
+      });
+      
+      // 为节点添加动画
+      const nodes = svgElement.querySelectorAll('g.node');
+      nodes.forEach(node => {
+        const rect = node.querySelector('rect');
+        const text = node.querySelector('text');
+        
+        if (rect && text) {
+          const textContent = text.textContent || '';
+          
+          if (textContent.includes('🔄') || textContent.includes('⏳')) {
+            rect.style.animation = 'runningNodePulse 1.5s ease-in-out infinite';
+          } else if (textContent.includes('✅')) {
+            rect.style.animation = 'successNodeBounce 0.6s ease-out';
+            rect.style.animationFillMode = 'forwards';
+          } else if (textContent.includes('❌')) {
+            rect.style.animation = 'errorNodeShake 0.5s ease-in-out 3';
+          }
+          
+          node.style.transition = 'transform 0.3s ease, filter 0.3s ease';
+          node.addEventListener('mouseenter', () => {
+            node.style.transform = 'scale(1.1)';
+            node.style.filter = 'drop-shadow(0 4px 8px rgba(0,0,0,0.2))';
+          });
+          node.addEventListener('mouseleave', () => {
+            node.style.transform = 'scale(1)';
+            node.style.filter = 'none';
+          });
+        }
+      });
+    }
+
+    // 不同状态的图表
+    function showInitialState() {
+      const diagram = `graph TD
+    User["👤 用户输入"] --> LLM["🧠 智能分析"]
+    LLM --> Output["📋 准备就绪"]
+    
+    classDef userNode fill:#e0e7ff,stroke:#3b82f6,stroke-width:2px,color:#1e40af
+    classDef llmNode fill:#f0f9ff,stroke:#0ea5e9,stroke-width:2px,color:#0c4a6e
+    classDef outputNode fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#15803d
+    
+    class User userNode
+    class LLM llmNode
+    class Output outputNode`;
+      
+      renderDiagram(diagram);
+    }
+
+    function showRunningState() {
+      const diagram = `graph TD
+    User["👤 用户输入"] --> LLM["🧠 智能分析"]
+    LLM --> Step0["🔄 Web Search"]
+    Step0 -.-> Step1["⏳ MinIO Uploader"]
+    Step1 -.-> FinalOutput["⏳ 处理中..."]
+    
+    classDef userNode fill:#e0e7ff,stroke:#3b82f6,stroke-width:2px,color:#1e40af
+    classDef llmNode fill:#f0f9ff,stroke:#0ea5e9,stroke-width:2px,color:#0c4a6e
+    classDef pendingStep fill:#f9fafb,stroke:#6b7280,stroke-width:2px,color:#4b5563
+    classDef runningStep fill:#fef3c7,stroke:#f59e0b,stroke-width:3px,color:#92400e
+    classDef finalOutput fill:#f3e8ff,stroke:#8b5cf6,stroke-width:2px,color:#7c3aed
+    
+    class User userNode
+    class LLM llmNode
+    class Step0 runningStep
+    class Step1 pendingStep
+    class FinalOutput finalOutput`;
+    
+      renderDiagram(diagram);
+    }
+
+    function showCompletedState() {
+      const diagram = `graph TD
+    User["👤 用户输入"] --> LLM["🧠 智能分析"]
+    LLM --> Step0["✅ Web Search"]
+    Step0 --> Step1["✅ MinIO Uploader"]
+    Step1 --> FinalOutput["✅ 任务完成"]
+    
+    classDef userNode fill:#e0e7ff,stroke:#3b82f6,stroke-width:2px,color:#1e40af
+    classDef llmNode fill:#f0f9ff,stroke:#0ea5e9,stroke-width:2px,color:#0c4a6e
+    classDef successStep fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#15803d
+    classDef finalOutput fill:#f3e8ff,stroke:#8b5cf6,stroke-width:2px,color:#7c3aed
+    
+    class User userNode
+    class LLM llmNode
+    class Step0 successStep
+    class Step1 successStep
+    class FinalOutput finalOutput`;
+    
+      renderDiagram(diagram);
+    }
+
+    function showErrorState() {
+      const diagram = `graph TD
+    User["👤 用户输入"] --> LLM["🧠 智能分析"]
+    LLM --> Step0["✅ Web Search"]
+    Step0 --> Step1["❌ MinIO Uploader"]
+    Step1 -.-> FinalOutput["⚠️ 部分完成"]
+    
+    classDef userNode fill:#e0e7ff,stroke:#3b82f6,stroke-width:2px,color:#1e40af
+    classDef llmNode fill:#f0f9ff,stroke:#0ea5e9,stroke-width:2px,color:#0c4a6e
+    classDef successStep fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#15803d
+    classDef errorStep fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#b91c1c
+    classDef finalOutput fill:#f3e8ff,stroke:#8b5cf6,stroke-width:2px,color:#7c3aed
+    
+    class User userNode
+    class LLM llmNode
+    class Step0 successStep
+    class Step1 errorStep
+    class FinalOutput finalOutput`;
+    
+      renderDiagram(diagram);
+    }
+
+    // 模拟执行过程
+    async function simulateProgress() {
+      showInitialState();
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      showRunningState();
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      showCompletedState();
+    }
+
+    // 默认显示初始状态
+    showInitialState();
+  </script>
+</body>
+</html> 

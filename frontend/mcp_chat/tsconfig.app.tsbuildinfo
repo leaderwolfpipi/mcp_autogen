@@ -1,0 +1,1 @@
+{"root":["./src/anti-flicker-manager.ts","./src/config.ts","./src/main.ts","./src/message-handler.ts","./src/vite-env.d.ts","./src/websocket-manager.ts","./src/app.vue","./src/components/helloworld.vue"],"errors":true,"version":"5.9.2"}

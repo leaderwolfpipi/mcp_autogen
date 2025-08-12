@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎨 ASCII流程图演示</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f8fafc;
+      line-height: 1.6;
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    
+    .header h1 {
+      color: #1e293b;
+      margin-bottom: 10px;
+    }
+    
+    .demo-container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      padding: 30px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    }
+    
+    .ascii-container {
+      width: 100%;
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      border-radius: 12px;
+      padding: 20px;
+      margin: 16px 0;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+    
+    .ascii-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    
+    .ascii-icon {
+      font-size: 18px;
+      color: #4f46e5;
+    }
+    
+    .ascii-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #1e293b;
+    }
+    
+    .ascii-diagram {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+    }
+    
+    .ascii-diagram pre {
+      margin: 0;
+      padding: 0;
+      font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', 'Ubuntu Mono', monospace;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #374151;
+      white-space: pre;
+      overflow-x: auto;
+      font-feature-settings: "liga" 0;
+      font-variant-ligatures: none;
+    }
+    
+    .demo-section {
+      margin-bottom: 30px;
+    }
+    
+    .demo-section h3 {
+      color: #1e293b;
+      margin-bottom: 10px;
+    }
+    
+    .demo-section p {
+      color: #64748b;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🎨 ASCII流程图演示</h1>
+    <p>简洁、稳定、清晰的可视化解决方案</p>
+  </div>
+
+  <div class="demo-container">
+    <div class="demo-section">
+      <h3>📋 初始状态</h3>
+      <p>用户刚提交任务，系统准备就绪</p>
+      <div class="ascii-container">
+        <div class="ascii-header">
+          <span class="ascii-icon">📊</span>
+          <span class="ascii-title">执行流程</span>
+        </div>
+        <div class="ascii-diagram">
+          <pre>    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         │
+         ▼
+    📋 准备就绪</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-section">
+      <h3>🔄 单工具执行中</h3>
+      <p>正在执行Web搜索任务</p>
+      <div class="ascii-container">
+        <div class="ascii-header">
+          <span class="ascii-icon">📊</span>
+          <span class="ascii-title">执行流程</span>
+        </div>
+        <div class="ascii-diagram">
+          <pre>    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         │
+         ▼
+  🔄 🔍 Web Search
+         │
+         ▼
+    ⏳ 处理中...</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-section">
+      <h3>✅ 单工具完成</h3>
+      <p>Web搜索已完成</p>
+      <div class="ascii-container">
+        <div class="ascii-header">
+          <span class="ascii-icon">📊</span>
+          <span class="ascii-title">执行流程</span>
+        </div>
+        <div class="ascii-diagram">
+          <pre>    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         │
+         ▼
+  ✅ 🔍 Web Search
+         │
+         ▼
+    ✅ 任务完成</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-section">
+      <h3>🔧 多工具执行中</h3>
+      <p>搜索完成，正在上传文件</p>
+      <div class="ascii-container">
+        <div class="ascii-header">
+          <span class="ascii-icon">📊</span>
+          <span class="ascii-title">执行流程</span>
+        </div>
+        <div class="ascii-diagram">
+          <pre>    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         │
+    ┌────┴────┐
+    ▼         ▼
+  ✅ 🔍 Web Search
+  🔄 📦 MinIO Uploader
+    │         │
+    └────┬────┘
+         ▼
+    ⏳ 处理中...</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-section">
+      <h3>⚠️ 部分失败</h3>
+      <p>搜索成功，但上传失败</p>
+      <div class="ascii-container">
+        <div class="ascii-header">
+          <span class="ascii-icon">📊</span>
+          <span class="ascii-title">执行流程</span>
+        </div>
+        <div class="ascii-diagram">
+          <pre>    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         │
+    ┌────┴────┐
+    ▼         ▼
+  ✅ 🔍 Web Search
+  ❌ 📦 MinIO Uploader
+    │         │
+    └────┬────┘
+         ▼
+    ⚠️ 部分完成</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-section">
+      <h3>🎯 优势总结</h3>
+      <ul>
+        <li><strong>稳定可靠</strong> - 不依赖外部渲染库，无兼容性问题</li>
+        <li><strong>性能优秀</strong> - 纯文本显示，加载速度快</li>
+        <li><strong>响应式友好</strong> - 与Vue完美集成，易于更新</li>
+        <li><strong>清晰直观</strong> - Unicode符号和emoji让流程一目了然</li>
+        <li><strong>易于维护</strong> - 纯文本逻辑，便于调试和扩展</li>
+      </ul>
+    </div>
+  </div>
+</body>
+</html> 

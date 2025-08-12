@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .output { background: #f5f5f5; padding: 15px; margin: 10px 0; height: 300px; overflow-y: auto; }
+        .log { margin: 5px 0; padding: 5px; border-left: 3px solid #ddd; }
+        .success { border-left-color: #4caf50; }
+        .error { border-left-color: #f44336; }
+        .progress { border-left-color: #2196f3; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebSocket 连接测试</h1>
+        
+        <div>
+            <button onclick="testConnection()">测试WebSocket连接</button>
+            <button onclick="clearLog()">清空日志</button>
+        </div>
+        
+        <div id="status">未连接</div>
+        
+        <div class="output" id="output"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let connected = false;
+        
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            output.appendChild(div);
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        function testConnection() {
+            if (connected) {
+                log('已经连接', 'error');
+                return;
+            }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const url = `${protocol}//${window.location.host}/ws/execute_task`;
+            
+            log(`尝试连接到: ${url}`, 'progress');
+            
+            ws = new WebSocket(url);
+            
+            ws.onopen = () => {
+                connected = true;
+                document.getElementById('status').textContent = '已连接';
+                log('WebSocket连接成功', 'success');
+                
+                // 发送测试消息
+                const payload = {
+                    user_input: "请帮我翻译这段文字：Hello, how are you?",
+                    input_data: null
+                };
+                
+                log(`发送测试消息: ${JSON.stringify(payload)}`, 'progress');
+                ws.send(JSON.stringify(payload));
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`收到消息: ${data.step} - ${data.message}`, data.status || 'info');
+                } catch (e) {
+                    log('消息解析失败: ' + e.message, 'error');
+                    log('原始消息: ' + event.data, 'error');
+                }
+            };
+            
+            ws.onclose = () => {
+                connected = false;
+                document.getElementById('status').textContent = '未连接';
+                log('WebSocket连接断开', 'error');
+            };
+            
+            ws.onerror = (error) => {
+                log('WebSocket错误: ' + error, 'error');
+            };
+        }
+        
+        function clearLog() {
+            document.getElementById('output').innerHTML = '';
+        }
+        
+        // 页面加载时自动测试
+        window.onload = () => {
+            setTimeout(testConnection, 1000);
+        };
+    </script>
+</body>
+</html> 

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mermaid 测试</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            margin: 20px;
+            background: #f8fafc;
+        }
+        
+        .mermaid-container {
+            width: 100%;
+            margin: 16px 0;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 8px;
+            overflow: visible;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 300px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .mermaid-diagram {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: visible;
+        }
+        
+        .mermaid-diagram svg {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            overflow: visible !important;
+            background: transparent;
+        }
+        
+        /* 动画效果 */
+        @keyframes dashFlow {
+            0% { stroke-dashoffset: 0; }
+            100% { stroke-dashoffset: -12; }
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+        }
+        
+        @keyframes bounceIn {
+            0% { transform: scale(0.3); opacity: 0; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+            70% { transform: scale(0.9); opacity: 0.9; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        .mermaid-diagram svg path[stroke-dasharray] {
+            stroke-dasharray: 8 4 !important;
+            animation: dashFlow 2s linear infinite !important;
+        }
+    </style>
+</head>
+<body>
+    <h1>Mermaid 图表测试</h1>
+    
+    <div class="mermaid-container">
+        <div class="mermaid-diagram" id="test-diagram">
+            <!-- Mermaid 图表将在这里渲染 -->
+        </div>
+    </div>
+    
+    <button onclick="renderDiagram()">渲染图表</button>
+    <button onclick="updateDiagram()">更新状态</button>
+    
+    <script>
+        // 初始化 Mermaid
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'default',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis',
+                padding: 30,
+                nodeSpacing: 50,
+                rankSpacing: 60
+            },
+            themeVariables: {
+                fontSize: '14px',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                primaryColor: '#e0e7ff',
+                primaryTextColor: '#1e40af',
+                primaryBorderColor: '#3b82f6',
+                lineColor: '#6b7280',
+                secondaryColor: '#f0f9ff',
+                tertiaryColor: '#f8fafc'
+            }
+        });
+        
+        let currentState = 0;
+        
+        const diagrams = [
+            // 初始状态
+            `graph TD
+                User["👤 用户输入"] --> LLM["🧠 LLM分析"]
+                LLM -.->|"⏳ 等待计划"| Waiting["⏳ 等待执行计划..."]
+                
+                classDef userNode fill:#e0e7ff,stroke:#3b82f6,stroke-width:2px,color:#1e40af
+                classDef llmNode fill:#f0f9ff,stroke:#0ea5e9,stroke-width:2px,color:#0c4a6e
+                classDef waitingNode fill:#f8fafc,stroke:#e2e8f0,stroke-width:2px,color:#64748b
+                
+                class User userNode
+                class LLM llmNode
+                class Waiting waitingNode`,
+            
+            // 执行中状态
+            `graph TD
+                User["👤 用户输入"] --> LLM["🧠 LLM分析"]
+                LLM -.->|"🔄 正在执行"| Tool1["🔄 搜索网页..."]
+                Tool1 -.->|"⏳ 等待"| Tool2["⏳ 分析数据..."]
+                Tool2 -.->|"⏳ 等待总结"| LLMSummary["🧠 LLM总结"]
+                LLMSummary -.->|"⏳ 等待输出"| Output["📋 最终输出"]
+                
+                classDef userNode fill:#e0e7ff,stroke:#3b82f6,stroke-width:2px,color:#1e40af
+                classDef llmNode fill:#f0f9ff,stroke:#0ea5e9,stroke-width:2px,color:#0c4a6e
+                classDef pendingTool fill:#f8fafc,stroke:#e2e8f0,stroke-width:2px,color:#64748b
+                classDef runningTool fill:#dbeafe,stroke:#3b82f6,stroke-width:3px,color:#1e40af
+                classDef outputNode fill:#f3e8ff,stroke:#8b5cf6,stroke-width:2px,color:#7c3aed
+                
+                class User userNode
+                class LLM,LLMSummary llmNode
+                class Output outputNode
+                class Tool1 runningTool
+                class Tool2 pendingTool`,
+            
+            // 完成状态
+            `graph TD
+                User["👤 用户输入"] --> LLM["🧠 LLM分析"]
+                LLM -->|"✅ 已完成"| Tool1["✅ 搜索网页"]
+                Tool1 -->|"✅ 完成"| Tool2["✅ 分析数据"]
+                Tool2 -->|"📋 生成结果"| LLMSummary["🧠 LLM总结"]
+                LLMSummary -->|"📤 输出结果"| Output["📋 最终输出"]
+                
+                classDef userNode fill:#e0e7ff,stroke:#3b82f6,stroke-width:2px,color:#1e40af
+                classDef llmNode fill:#f0f9ff,stroke:#0ea5e9,stroke-width:2px,color:#0c4a6e
+                classDef successTool fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#15803d
+                classDef outputNode fill:#f3e8ff,stroke:#8b5cf6,stroke-width:2px,color:#7c3aed
+                
+                class User userNode
+                class LLM,LLMSummary llmNode
+                class Output outputNode
+                class Tool1,Tool2 successTool`
+        ];
+        
+        async function renderDiagram() {
+            const diagramEl = document.getElementById('test-diagram');
+            const diagramCode = diagrams[currentState];
+            
+            try {
+                const { svg } = await mermaid.render('test-svg', diagramCode);
+                diagramEl.innerHTML = svg;
+                
+                // 添加动画效果
+                setTimeout(() => {
+                    const svgElement = diagramEl.querySelector('svg');
+                    if (svgElement) {
+                        addAnimations(svgElement);
+                    }
+                }, 100);
+                
+            } catch (error) {
+                console.error('渲染失败:', error);
+                diagramEl.innerHTML = `<p style="color: red;">渲染失败: ${error.message}</p>`;
+            }
+        }
+        
+        function updateDiagram() {
+            currentState = (currentState + 1) % diagrams.length;
+            renderDiagram();
+        }
+        
+        function addAnimations(svgElement) {
+            // 为虚线路径添加动画
+            const allPaths = svgElement.querySelectorAll('path');
+            allPaths.forEach(path => {
+                if (path.style.strokeDasharray || path.getAttribute('stroke-dasharray')) {
+                    path.style.strokeDasharray = '8 4';
+                    path.style.animation = 'dashFlow 2s linear infinite';
+                }
+            });
+            
+            // 为节点添加动画
+            const nodes = svgElement.querySelectorAll('g.node');
+            nodes.forEach(node => {
+                const rect = node.querySelector('rect');
+                if (rect) {
+                    const fillColor = rect.getAttribute('fill') || '';
+                    if (fillColor.includes('#dbeafe')) {
+                        node.style.animation = 'pulse 2s infinite';
+                    } else if (fillColor.includes('#dcfce7')) {
+                        node.style.animation = 'bounceIn 0.6s ease-out';
+                    }
+                }
+            });
+        }
+        
+        // 初始渲染
+        renderDiagram();
+    </script>
+</body>
+</html> 

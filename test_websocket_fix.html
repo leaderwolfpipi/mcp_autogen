@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket修复测试</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .header {
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        button {
+            padding: 12px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-weight: 600;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .messages {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-left: 4px solid #007bff;
+            background: white;
+            border-radius: 4px;
+        }
+        .message.error {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+        .message.success {
+            border-left-color: #28a745;
+            background: #f0fff4;
+        }
+        .timestamp {
+            color: #6c757d;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔧 WebSocket修复测试</h1>
+        <p>测试修复后的模式检测和WebSocket连接</p>
+    </div>
+
+    <div class="container">
+        <h3>连接状态</h3>
+        <div id="connectionStatus" class="status disconnected">❌ 未连接</div>
+        
+        <h3>发送消息</h3>
+        <div class="input-group">
+            <input type="text" id="messageInput" placeholder="输入测试消息..." value="帮我搜索北京的天气">
+            <button id="sendBtn" onclick="sendMessage()" disabled>发送</button>
+            <button id="connectBtn" onclick="toggleConnection()">连接</button>
+        </div>
+        
+        <h3>消息日志</h3>
+        <div id="messages" class="messages">
+            <div class="message">等待连接...</div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let isConnected = false;
+
+        function toggleConnection() {
+            if (isConnected) {
+                disconnect();
+            } else {
+                connect();
+            }
+        }
+
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.hostname}:8000/ws/mcp/chat`;
+            
+            addMessage(`🔌 正在连接到: ${wsUrl}`, 'info');
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function() {
+                isConnected = true;
+                updateConnectionStatus(true);
+                addMessage('✅ WebSocket连接成功', 'success');
+            };
+            
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    addMessage(`📥 收到: ${JSON.stringify(data, null, 2)}`, 'info');
+                } catch (e) {
+                    addMessage(`📥 收到: ${event.data}`, 'info');
+                }
+            };
+            
+            ws.onclose = function() {
+                isConnected = false;
+                updateConnectionStatus(false);
+                addMessage('🔌 WebSocket连接关闭', 'error');
+            };
+            
+            ws.onerror = function(error) {
+                addMessage(`❌ WebSocket错误: ${error}`, 'error');
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message) {
+                addMessage('❌ 请输入消息内容', 'error');
+                return;
+            }
+            
+            if (!isConnected) {
+                addMessage('❌ 请先连接WebSocket', 'error');
+                return;
+            }
+            
+            const payload = {
+                message: message,
+                session_id: 'test-session-' + Date.now(),
+                context: {}
+            };
+            
+            addMessage(`📤 发送: ${JSON.stringify(payload, null, 2)}`, 'success');
+            ws.send(JSON.stringify(payload));
+            
+            // 清空输入框
+            input.value = '';
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusDiv = document.getElementById('connectionStatus');
+            const connectBtn = document.getElementById('connectBtn');
+            const sendBtn = document.getElementById('sendBtn');
+            
+            if (connected) {
+                statusDiv.textContent = '✅ 已连接';
+                statusDiv.className = 'status connected';
+                connectBtn.textContent = '断开';
+                sendBtn.disabled = false;
+            } else {
+                statusDiv.textContent = '❌ 未连接';
+                statusDiv.className = 'status disconnected';
+                connectBtn.textContent = '连接';
+                sendBtn.disabled = true;
+            }
+        }
+
+        function addMessage(text, type = 'info') {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            messageDiv.innerHTML = `
+                <div class="timestamp">${timestamp}</div>
+                <div>${text}</div>
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // 允许回车发送消息
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // 页面加载完成后的提示
+        document.addEventListener('DOMContentLoaded', function() {
+            addMessage('🚀 页面加载完成，点击"连接"按钮开始测试', 'info');
+        });
+    </script>
+</body>
+</html> 

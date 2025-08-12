@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🧪 ASCII图表集成测试</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f8fafc;
+      line-height: 1.6;
+    }
+    
+    .test-container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      padding: 30px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    
+    .test-section {
+      margin-bottom: 30px;
+      padding: 20px;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+    }
+    
+    .test-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 15px;
+    }
+    
+    .test-controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    
+    button {
+      padding: 8px 16px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    
+    button:hover {
+      background: #2563eb;
+    }
+    
+    button.success {
+      background: #10b981;
+    }
+    
+    button.error {
+      background: #ef4444;
+    }
+    
+    .ascii-container {
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid #e2e8f0;
+    }
+    
+    .ascii-diagram pre {
+      margin: 0;
+      padding: 16px;
+      background: white;
+      border-radius: 8px;
+      font-family: 'SF Mono', 'Monaco', monospace;
+      font-size: 14px;
+      line-height: 1.8;
+      color: #374151;
+      border: 1px solid #e2e8f0;
+    }
+    
+    .log-container {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: 'SF Mono', monospace;
+      font-size: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 20px;
+    }
+    
+    .log-entry {
+      margin-bottom: 4px;
+    }
+    
+    .log-info { color: #60a5fa; }
+    .log-success { color: #34d399; }
+    .log-warning { color: #fbbf24; }
+    .log-error { color: #f87171; }
+  </style>
+</head>
+<body>
+  <div class="test-container">
+    <div class="header">
+      <h1>🧪 ASCII图表集成测试</h1>
+      <p>测试动态ASCII流程图的实时更新功能</p>
+    </div>
+
+    <div class="test-section">
+      <div class="test-title">📊 ExecutionPlanManager 测试</div>
+      <div class="test-controls">
+        <button onclick="initPlan()">初始化计划</button>
+        <button onclick="startTool('web_search')">启动Web Search</button>
+        <button onclick="completeTool('web_search')" class="success">完成Web Search</button>
+        <button onclick="startTool('minio_uploader')">启动MinIO Upload</button>
+        <button onclick="completeTool('minio_uploader')" class="success">完成MinIO Upload</button>
+        <button onclick="failTool('minio_uploader')" class="error">失败MinIO Upload</button>
+        <button onclick="resetTest()">重置测试</button>
+      </div>
+      
+      <div class="ascii-container">
+        <div class="ascii-diagram">
+          <pre id="ascii-output">    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         │
+         ▼
+    📋 准备就绪</pre>
+        </div>
+      </div>
+      
+      <div class="log-container" id="log-container"></div>
+    </div>
+  </div>
+
+  <script>
+    // 模拟ExecutionPlanManager类
+    class TestExecutionPlanManager {
+      constructor() {
+        this.plan = null;
+        this.stepStates = new Map();
+      }
+
+      initPlan(plan) {
+        this.plan = plan;
+        this.stepStates.clear();
+        plan.steps.forEach(step => {
+          this.stepStates.set(step.tool_name, 'pending');
+        });
+        this.log('info', `初始化计划: ${plan.steps.length} 个步骤`);
+      }
+
+      updateStepState(stepId, state) {
+        this.stepStates.set(stepId, state);
+        this.log('success', `更新步骤状态: ${stepId} -> ${state}`);
+      }
+
+      generateAsciiDiagram() {
+        if (!this.plan || !this.plan.steps || this.plan.steps.length === 0) {
+          return this.generateInitialDiagram();
+        }
+
+        let diagram = '';
+        
+        // 分析当前执行状态
+        const stepStates = this.analyzeStepStates();
+        const visibleSteps = this.getVisibleSteps(stepStates);
+        
+        // 构建基础结构
+        diagram += this.buildBasicStructure();
+        
+        // 如果有可见步骤，构建工具执行部分
+        if (visibleSteps.length > 0) {
+          diagram += this.buildToolsSection(visibleSteps);
+        }
+        
+        // 构建最终状态
+        diagram += this.buildFinalStatus(stepStates);
+        
+        return diagram;
+      }
+
+      generateInitialDiagram() {
+        return `    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         │
+         ▼
+    📋 准备就绪`;
+      }
+
+      analyzeStepStates() {
+        let currentRunningIndex = -1;
+        let lastCompletedIndex = -1;
+        let hasError = false;
+        let totalCompleted = 0;
+        
+        this.plan.steps.forEach((step, index) => {
+          const state = this.stepStates.get(step.tool_name) || 'pending';
+          
+          if (state === 'running') {
+            currentRunningIndex = index;
+          } else if (state === 'success') {
+            lastCompletedIndex = Math.max(lastCompletedIndex, index);
+            totalCompleted++;
+          } else if (state === 'error') {
+            hasError = true;
+            lastCompletedIndex = Math.max(lastCompletedIndex, index);
+          }
+        });
+        
+        const allCompleted = totalCompleted === this.plan.steps.length;
+        const hasRunning = currentRunningIndex >= 0;
+        
+        return {
+          currentRunningIndex,
+          lastCompletedIndex,
+          hasError,
+          allCompleted,
+          hasRunning,
+          totalCompleted
+        };
+      }
+
+      getVisibleSteps(stepStates) {
+        const { currentRunningIndex, lastCompletedIndex } = stepStates;
+        
+        let showUpToIndex = -1;
+        
+        if (currentRunningIndex >= 0) {
+          showUpToIndex = currentRunningIndex;
+        } else if (lastCompletedIndex >= 0) {
+          showUpToIndex = Math.min(lastCompletedIndex + 1, this.plan.steps.length - 1);
+        } else {
+          showUpToIndex = 0;
+        }
+        
+        return this.plan.steps.slice(0, showUpToIndex + 1);
+      }
+
+      buildBasicStructure() {
+        return `    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析\n`;
+      }
+
+      buildToolsSection(visibleSteps) {
+        let section = '';
+        
+        visibleSteps.forEach((step, index) => {
+          const state = this.stepStates.get(step.tool_name) || 'pending';
+          
+          const stateIcon = this.getStateIcon(state);
+          const toolIcon = this.getToolIcon(step.tool_name);
+          const toolName = this.getCleanToolName(step.tool_name);
+          const connectionLine = this.getConnectionLine(state);
+          
+          if (index === 0) {
+            section += `         │
+         ▼\n`;
+          }
+          
+          section += `  ${stateIcon} ${toolIcon} ${toolName}\n`;
+          
+          if (index < visibleSteps.length - 1) {
+            section += `         ${connectionLine}
+         ▼\n`;
+          } else {
+            section += `         ${connectionLine}
+         ▼\n`;
+          }
+        });
+        
+        return section;
+      }
+
+      buildFinalStatus(stepStates) {
+        const { allCompleted, hasError, hasRunning } = stepStates;
+        
+        if (allCompleted && !hasError) {
+          return `    ✅ 任务完成`;
+        } else if (hasError) {
+          return `    ⚠️ 部分完成`;
+        } else if (hasRunning) {
+          return `    🔄 执行中...`;
+        } else {
+          return `    ⏳ 准备输出`;
+        }
+      }
+
+      getStateIcon(state) {
+        const stateIcons = {
+          'pending': '⏳',
+          'running': '🔄',
+          'success': '✅',
+          'error': '❌'
+        };
+        return stateIcons[state] || '⏳';
+      }
+
+      getToolIcon(toolName) {
+        const toolIcons = {
+          'web_search': '🔍',
+          'minio_uploader': '📦',
+          'image_uploader': '🖼️'
+        };
+        return toolIcons[toolName] || '🔧';
+      }
+
+      getCleanToolName(toolName) {
+        const toolNameMap = {
+          'web_search': 'Web Search',
+          'minio_uploader': 'MinIO Upload',
+          'image_uploader': 'Image Upload'
+        };
+        return toolNameMap[toolName] || toolName;
+      }
+
+      getConnectionLine(state) {
+        switch (state) {
+          case 'running':
+            return '┆┆┆';
+          case 'success':
+            return '│';
+          case 'error':
+            return '╋';
+          default:
+            return '┇';
+        }
+      }
+
+      log(level, message) {
+        const timestamp = new Date().toLocaleTimeString();
+        const logContainer = document.getElementById('log-container');
+        const logEntry = document.createElement('div');
+        logEntry.className = `log-entry log-${level}`;
+        logEntry.textContent = `[${timestamp}] ${message}`;
+        logContainer.appendChild(logEntry);
+        logContainer.scrollTop = logContainer.scrollHeight;
+      }
+    }
+
+    // 创建测试实例
+    const testManager = new TestExecutionPlanManager();
+
+    // 测试函数
+    function initPlan() {
+      const testPlan = {
+        steps: [
+          { tool_name: 'web_search', description: '搜索相关信息' },
+          { tool_name: 'minio_uploader', description: '上传处理结果' }
+        ]
+      };
+      testManager.initPlan(testPlan);
+      updateDisplay();
+    }
+
+    function startTool(toolName) {
+      testManager.updateStepState(toolName, 'running');
+      updateDisplay();
+    }
+
+    function completeTool(toolName) {
+      testManager.updateStepState(toolName, 'success');
+      updateDisplay();
+    }
+
+    function failTool(toolName) {
+      testManager.updateStepState(toolName, 'error');
+      updateDisplay();
+    }
+
+    function resetTest() {
+      testManager.plan = null;
+      testManager.stepStates.clear();
+      updateDisplay();
+      document.getElementById('log-container').innerHTML = '';
+    }
+
+    function updateDisplay() {
+      const diagram = testManager.generateAsciiDiagram();
+      document.getElementById('ascii-output').textContent = diagram;
+      testManager.log('info', '图表已更新');
+    }
+
+    // 自动运行完整测试
+    function runFullTest() {
+      setTimeout(() => initPlan(), 500);
+      setTimeout(() => startTool('web_search'), 1500);
+      setTimeout(() => completeTool('web_search'), 3000);
+      setTimeout(() => startTool('minio_uploader'), 4000);
+      setTimeout(() => completeTool('minio_uploader'), 5500);
+    }
+
+    // 页面加载完成后运行演示
+    window.onload = function() {
+      testManager.log('info', '测试环境初始化完成');
+      // runFullTest(); // 取消自动运行，让用户手动测试
+    };
+  </script>
+</body>
+</html> 

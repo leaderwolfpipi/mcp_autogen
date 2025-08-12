@@ -1,0 +1,8 @@
+2025-08-10 15:09:30,010 - __main__ - INFO - 🚀 启动标准MCP协议API服务...
+2025-08-10 15:09:30,010 - __main__ - INFO - 🌐 标准MCP服务将在 http://0.0.0.0:8000 启动
+2025-08-10 15:09:30,010 - __main__ - INFO - 🔗 标准MCP WebSocket端点: ws://0.0.0.0:8000/ws/mcp/standard
+2025-08-10 15:09:30,010 - __main__ - INFO - 💬 聊天WebSocket端点: ws://0.0.0.0:8000/ws/mcp/chat
+2025-08-10 15:09:30,010 - __main__ - INFO - 📺 标准MCP演示页面: http://0.0.0.0:8000/demo/standard
+2025-08-10 15:09:30,010 - __main__ - INFO - 📋 MCP协议信息: http://0.0.0.0:8000/mcp/info
+2025-08-10 15:09:30,010 - __main__ - INFO - 🔧 可用工具: http://0.0.0.0:8000/mcp/tools
+2025-08-10 15:09:30,060 - __main__ - ERROR - ❌ 标准MCP服务启动失败: expected an indented block after 'try' statement on line 25 (mcp_standard_api.py, line 26)
