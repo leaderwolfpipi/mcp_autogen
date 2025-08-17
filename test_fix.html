@@ -3,156 +3,204 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>修复测试</title>
+    <title>修复测试 - 动态状态更新</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; }
-        .container { max-width: 800px; margin: 0 auto; }
-        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
-        .connected { background: #d4edda; color: #155724; }
-        .disconnected { background: #f8d7da; color: #721c24; }
-        .message { padding: 8px; margin: 5px 0; border-left: 4px solid #007bff; background: #f8f9fa; }
-        .user { border-left-color: #28a745; text-align: right; }
-        .assistant { border-left-color: #007bff; }
-        .system { border-left-color: #ffc107; background: #fff3cd; }
-        .error { border-left-color: #dc3545; background: #f8d7da; }
-        button { padding: 10px 20px; margin: 5px; border: none; border-radius: 4px; cursor: pointer; }
-        .primary { background: #007bff; color: white; }
-        .primary:hover { background: #0056b3; }
-        input { padding: 10px; width: 70%; border: 1px solid #ddd; border-radius: 4px; }
-        #messages { height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            margin: 0; padding: 20px; background: #f5f5f5;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .test-section {
+            background: white; padding: 20px; margin: 10px 0;
+            border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .status { padding: 8px 12px; border-radius: 4px; margin: 5px 0; }
+        .connected { background: #e7f5e7; color: #2d5a2d; }
+        .disconnected { background: #ffe7e7; color: #5a2d2d; }
+        .running { background: #e7f0ff; color: #2d4a5a; }
+        .ascii-display {
+            background: #f8f9fa; border: 1px solid #dee2e6;
+            padding: 15px; border-radius: 6px; margin: 10px 0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            white-space: pre-wrap; font-size: 14px;
+            line-height: 1.4;
+        }
+        .controls { margin: 20px 0; }
+        button {
+            background: #007bff; color: white; border: none;
+            padding: 10px 20px; border-radius: 5px; cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        .log-entry {
+            padding: 5px 10px; margin: 2px 0; border-radius: 3px;
+            font-size: 12px; font-family: monospace;
+        }
+        .log-info { background: #e7f0ff; }
+        .log-success { background: #e7f5e7; }
+        .log-error { background: #ffe7e7; }
+        .log-warning { background: #fff3cd; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🔧 修复测试</h1>
-        <div id="status" class="status disconnected">未连接</div>
+        <h1>🔧 修复测试 - 动态状态更新</h1>
         
-        <div>
-            <input type="text" id="messageInput" placeholder="输入测试消息..." value="搜下李斯">
-            <button class="primary" onclick="sendMessage()">发送</button>
-            <button onclick="connectWS()">连接</button>
-            <button onclick="disconnectWS()">断开</button>
+        <div class="test-section">
+            <h3>连接状态</h3>
+            <div id="connectionStatus" class="status disconnected">❌ 未连接</div>
+            
+            <div class="controls">
+                <button id="connectBtn" onclick="connectWebSocket()">连接WebSocket</button>
+                <button id="testBtn" onclick="sendTestMessage()" disabled>发送测试消息</button>
+                <button onclick="clearLogs()">清除日志</button>
+            </div>
         </div>
         
-        <div id="messages"></div>
+        <div class="test-section">
+            <h3>📊 执行流程图 (实时更新)</h3>
+            <div id="asciiDisplay" class="ascii-display">等待连接...</div>
+        </div>
+        
+        <div class="test-section">
+            <h3>📋 状态日志</h3>
+            <div id="statusLog" style="max-height: 400px; overflow-y: auto;"></div>
+        </div>
     </div>
 
     <script>
         let ws = null;
         let isConnected = false;
-
-        function connectWS() {
-            const url = 'ws://localhost:8000/ws/mcp/chat';
-            ws = new WebSocket(url);
+        
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//localhost:8000/ws/mcp/chat`;
             
-            ws.onopen = () => {
-                isConnected = true;
-                updateStatus('已连接', 'connected');
-                addMessage('system', '🔌 WebSocket连接成功');
-            };
-            
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                handleMessage(data);
-            };
-            
-            ws.onclose = () => {
-                isConnected = false;
-                updateStatus('连接断开', 'disconnected');
-                addMessage('system', '🔌 连接断开');
-            };
-            
-            ws.onerror = (error) => {
-                addMessage('error', `连接错误: ${error}`);
-            };
-        }
-
-        function disconnectWS() {
-            if (ws) {
-                ws.close();
+            try {
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = function() {
+                    isConnected = true;
+                    updateConnectionStatus('✅ 已连接', 'connected');
+                    document.getElementById('testBtn').disabled = false;
+                    addLog('WebSocket连接成功', 'success');
+                };
+                
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        handleMessage(data);
+                    } catch (e) {
+                        addLog(`消息解析失败: ${e.message}`, 'error');
+                    }
+                };
+                
+                ws.onclose = function(event) {
+                    isConnected = false;
+                    updateConnectionStatus('❌ 连接断开', 'disconnected');
+                    document.getElementById('testBtn').disabled = true;
+                    addLog(`WebSocket连接关闭: ${event.code}`, 'warning');
+                };
+                
+                ws.onerror = function(error) {
+                    addLog(`WebSocket错误: ${error}`, 'error');
+                };
+                
+            } catch (error) {
+                addLog(`连接失败: ${error.message}`, 'error');
             }
         }
-
-        function sendMessage() {
-            const input = document.getElementById('messageInput');
-            const message = input.value.trim();
-            
-            if (!message || !isConnected) {
+        
+        function sendTestMessage() {
+            if (!ws || !isConnected) {
+                addLog('WebSocket未连接', 'error');
                 return;
             }
             
-            addMessage('user', message);
+            const testMessage = {
+                user_input: "帮我搜索一下最新的AI技术发展趋势",
+                session_id: `test_${Date.now()}`
+            };
             
-            ws.send(JSON.stringify({
-                user_input: message,
-                session_id: 'test_' + Date.now()
-            }));
-            
-            input.value = '';
+            ws.send(JSON.stringify(testMessage));
+            addLog('发送测试消息: ' + testMessage.user_input, 'info');
         }
-
+        
         function handleMessage(data) {
-            console.log('收到消息:', data);
+            addLog(`收到消息: ${data.type}`, 'info');
+            console.log('📨 收到消息:', data);
             
+            // 如果消息包含ASCII图表，更新显示
+            if (data.ascii_diagram || data.mermaid_diagram) {
+                const diagram = data.ascii_diagram || data.mermaid_diagram || '暂无图表数据';
+                document.getElementById('asciiDisplay').textContent = diagram;
+                addLog('更新执行流程图', 'success');
+            }
+            
+            // 根据消息类型处理
             switch(data.type) {
                 case 'mode_detection':
-                    addMessage('system', `🎯 ${data.message} (${data.mode})`);
+                    addLog(`🎯 模式检测: ${data.mode} - ${data.message}`, 'info');
                     break;
+                    
                 case 'task_planning':
-                    addMessage('system', `🧠 ${data.message}`);
+                    addLog(`📋 任务规划: ${data.message}`, 'info');
                     break;
+                    
                 case 'task_start':
-                    addMessage('assistant', `🚀 ${data.message}`);
+                    addLog(`🚀 任务开始: ${data.message}`, 'success');
                     break;
+                    
                 case 'tool_start':
-                    addMessage('system', `⚙️ ${data.message} (${data.tool_name})`);
+                    addLog(`🔧 工具开始: ${data.tool_name} - ${data.message}`, 'running');
                     break;
+                    
                 case 'tool_result':
-                    const result = data.step_data;
-                    const status = result.status === 'success' ? '✅' : '❌';
-                    addMessage('system', `${status} ${result.tool_name} - ${result.status}`);
+                    const status = data.step_data?.status === 'success' ? '✅' : '❌';
+                    addLog(`${status} 工具完成: ${data.step_data?.tool_name} - ${data.step_data?.status}`, 
+                           data.step_data?.status === 'success' ? 'success' : 'error');
                     break;
+                    
                 case 'task_complete':
-                    addMessage('assistant', `🎉 ${data.message}`);
+                    addLog(`🎉 任务完成: ${data.message}`, 'success');
                     break;
+                    
                 case 'chat_response':
-                    addMessage('assistant', `💬 ${data.message}`);
+                    addLog(`💬 聊天回复: ${data.message.substring(0, 50)}...`, 'info');
                     break;
+                    
                 case 'error':
-                    addMessage('error', `❌ ${data.message}`);
-                    break;
-                default:
-                    addMessage('system', `🔍 ${data.type}: ${JSON.stringify(data)}`);
+                    addLog(`❌ 错误: ${data.message}`, 'error');
                     break;
             }
         }
-
-        function addMessage(type, content) {
-            const messages = document.getElementById('messages');
-            const div = document.createElement('div');
-            div.className = `message ${type}`;
-            div.innerHTML = `<small>${new Date().toLocaleTimeString()}</small><br>${content}`;
-            messages.appendChild(div);
-            messages.scrollTop = messages.scrollHeight;
+        
+        function updateConnectionStatus(text, className) {
+            const statusEl = document.getElementById('connectionStatus');
+            statusEl.textContent = text;
+            statusEl.className = `status ${className}`;
         }
-
-        function updateStatus(text, type) {
-            const status = document.getElementById('status');
-            status.textContent = text;
-            status.className = `status ${type}`;
+        
+        function addLog(message, type = 'info') {
+            const logEl = document.getElementById('statusLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${timestamp}] ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
         }
-
-        // 自动连接
-        window.onload = () => {
-            connectWS();
+        
+        function clearLogs() {
+            document.getElementById('statusLog').innerHTML = '';
+            document.getElementById('asciiDisplay').textContent = '等待连接...';
+        }
+        
+        // 页面加载时自动连接
+        window.onload = function() {
+            addLog('页面加载完成，准备连接WebSocket', 'info');
         };
-
-        // 回车发送
-        document.getElementById('messageInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendMessage();
-            }
-        });
     </script>
 </body>
 </html> 

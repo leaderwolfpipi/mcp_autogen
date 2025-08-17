@@ -12,7 +12,7 @@ import time
 import jmespath
 import re
 import urllib.parse
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Callable
 import ast
 
 from .llm_clients.openai_client import OpenAIClient
@@ -22,10 +22,11 @@ from .tool_executor import ToolExecutor
 class TaskEngine:
     """任务调度引擎"""
     
-    def __init__(self, tool_registry, max_depth=5):
+    def __init__(self, tool_registry, max_depth=5, status_callback=None):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.tool_registry = tool_registry
         self.max_depth = max_depth
+        self.status_callback = status_callback  # WebSocket状态回调
         
         # 从环境变量获取OpenAI配置
         api_key = os.getenv("OPENAI_API_KEY")
@@ -51,6 +52,27 @@ class TaskEngine:
         # 初始化工具执行器
         self.tool_executor = ToolExecutor(tool_registry)
     
+    def set_status_callback(self, callback: Callable):
+        """设置状态回调函数"""
+        self.status_callback = callback
+        self.logger.info("状态回调已设置")
+    
+    async def _send_status_update(self, message_type: str, **kwargs):
+        """发送状态更新"""
+        if self.status_callback:
+            try:
+                message = {
+                    "type": message_type,
+                    "timestamp": time.time(),
+                    **kwargs
+                }
+                self.logger.info(f"📤 发送状态更新: {message_type} - {kwargs.get('message', '')}")
+                await self.status_callback(message)
+            except Exception as e:
+                self.logger.warning(f"状态更新发送失败: {e}")
+        else:
+            self.logger.warning(f"⚠️ 状态回调未设置，跳过状态更新: {message_type}")
+    
     async def execute(self, query: str, context: dict) -> dict:
         """
         执行任务 - 支持智能模式判断
@@ -69,9 +91,20 @@ class TaskEngine:
             task_mode = await self._detect_task_mode(query)
             self.logger.info(f"模式检测结果: {'任务模式' if task_mode else '闲聊模式'} - 查询: {query[:50]}...")
             
+            # 发送模式检测结果
+            await self._send_status_update("mode_detection", 
+                mode="task" if task_mode else "chat",
+                message=f"检测到{'任务执行' if task_mode else '闲聊对话'}模式"
+            )
+            
             if not task_mode:
                 # 闲聊模式：直接用LLM回答，不触发工具执行
-                return await self._handle_chat_mode(query, start_time)
+                result = await self._handle_chat_mode(query, start_time)
+                await self._send_status_update("chat_response", 
+                    message=result.get("final_output", ""),
+                    execution_time=result.get("execution_time", 0)
+                )
+                return result
             
             # 2. 任务模式：进行工具规划与执行
             # 将原始查询添加到上下文中，供后续处理使用
@@ -79,15 +112,25 @@ class TaskEngine:
             
             # 生成执行计划
             self.logger.info(f"开始生成执行计划: {query[:50]}...")
+            await self._send_status_update("task_planning", message="正在生成执行计划...")
+            
             execution_plan = await self._generate_plan(query, enhanced_context)
             
             if not execution_plan:
-                return {
+                error_result = {
                     "success": False,
                     "error": "Failed to generate execution plan",
                     "final_output": "无法生成执行计划，请尝试重新描述您的需求。",
                     "execution_time": time.time() - start_time
                 }
+                await self._send_status_update("error", message="执行计划生成失败")
+                return error_result
+            
+            # 发送任务开始和计划信息
+            await self._send_status_update("task_start", 
+                message=f"开始执行任务，共{len(execution_plan)}个步骤",
+                plan={"steps": execution_plan, "query": query}
+            )
             
             # 执行计划
             self.logger.info(f"开始执行计划，共{len(execution_plan)}个步骤")
@@ -97,11 +140,17 @@ class TaskEngine:
             result['execution_time'] = time.time() - start_time
             result['mode'] = 'task'
             
+            # 发送任务完成消息
+            await self._send_status_update("task_complete", 
+                message=result.get("final_output", "任务执行完成"),
+                execution_time=result['execution_time']
+            )
+            
             return result
             
         except Exception as e:
             self.logger.error(f"任务执行失败: {e}")
-            return {
+            error_result = {
                 "success": False,
                 "error": str(e),
                 "error_code": "TASK_EXECUTION_ERROR",
@@ -109,6 +158,8 @@ class TaskEngine:
                 "execution_time": time.time() - start_time,
                 "mode": "error"
             }
+            await self._send_status_update("error", message=f"任务执行失败: {str(e)}")
+            return error_result
     
     async def _detect_task_mode(self, query: str) -> bool:
         """
@@ -143,21 +194,24 @@ class TaskEngine:
 分类标准：
 
 【闲聊对话】- 纯社交交流，不需要查找信息或使用工具：
-• 问候寒暄："你好"、"吃了吗"、"最近怎么样"、"身体好吗"
+• 问候寒暄："你好"、"吃了吗"、"最近怎么样"、"身体好吗"、"您那..."、"吃了吗？您那..."
 • 感谢告别："谢谢"、"再见"、"辛苦了"
-• 确认回应："好的"、"知道了"、"是的"
-• 关怀闲聊："工作怎么样"、"今天心情如何"、"休息一下吧"
-• 一般性询问："你是机器人吗"、"忙不忙"、"睡得好吗"
+• 确认回应："好的"、"知道了"、"是的"、"嗯"、"哦"
+• 关怀闲聊："工作怎么样"、"今天心情如何"、"休息一下吧"、"忙不忙"、"累不累"
+• 一般性询问："你是机器人吗"、"你会什么"、"你能做什么"、"睡得好吗"
+• 不完整的问候：句子不完整或被截断的社交性表达
+• 简单回复：单纯的确认、感叹或简短反应
 
 【任务请求】- 需要获取信息、执行操作或使用工具：
-• 知识询问："谁是XX"、"什么是XX"、"如何做XX"
-• 搜索请求："搜索XX"、"查找XX"、"帮我找XX"
-• 工具使用："翻译XX"、"分析XX"、"生成XX"、"处理XX"
-• 信息获取：包含明确的信息需求或疑问词
+• 知识询问："谁是XX"、"什么是XX"、"如何做XX"、"XX是什么意思"
+• 搜索请求："搜索XX"、"查找XX"、"帮我找XX"、"XX的信息"
+• 工具使用："翻译XX"、"分析XX"、"生成XX报告"、"处理XX"
+• 信息获取：包含明确的信息需求或疑问词（什么、谁、哪里、如何等）
 
-关键判断：
-- 社交性质的对话 = 闲聊对话
-- 需要查询信息或执行任务 = 任务请求
+重要提示：
+- 如果查询显然是社交性质的对话（问候、关怀、感谢等），即使有疑问词也应归类为【闲聊对话】
+- 只有明确需要查找信息、执行任务或使用工具的查询才是【任务请求】
+- 不完整或模糊的表达，如果明显是社交性质，应归类为【闲聊对话】
 
 回答格式：只回答"闲聊对话"或"任务请求"。"""
         
@@ -243,7 +297,7 @@ class TaskEngine:
         # 关怀性询问：如果是对"你"的关怀询问，更可能是闲聊
         if has_you and has_care:
             return False
-        
+            
         # 知识性询问优先判断为任务（新增逻辑）
         if has_knowledge_question:
             return True
@@ -265,13 +319,53 @@ class TaskEngine:
         return len(query) > 8
     
     async def _handle_chat_mode(self, query: str, start_time: float) -> dict:
-        """处理闲聊模式"""
+        """处理闲聊模式 - 支持流式输出"""
         try:
+            # 发送开始处理状态
+            await self._send_status_update("chat_processing", message="正在生成回复...")
+            
             final_output = "你好！有什么可以帮助您的吗？"  # 默认回复
             
-            if self.llm and hasattr(self.llm, 'generate'):
+            if self.llm and hasattr(self.llm, 'generate_streaming'):
                 try:
-                    # 使用LLM进行友好回答
+                    # 使用LLM流式生成友好回答
+                    chat_prompt = f"""
+你是一个友好、专业的AI助手。用户说: "{query}"
+
+请给出自然、友好的回应。要求：
+1. 保持简洁明了，不要过于冗长
+2. 语气亲切自然，如同朋友间的对话
+3. 如果用户是问候，要礼貌回应
+4. 如果用户表达感谢，要谦逊回复
+5. 如果用户询问你的能力，可以简单介绍你能帮助搜索信息、处理文件等
+
+直接回复，不要格式化标记。
+"""
+                    messages = [{"role": "user", "content": chat_prompt}]
+                    
+                    # 流式生成回复
+                    content_buffer = ""
+                    async for chunk in self.llm.generate_streaming(messages, max_tokens=100, temperature=0.7):
+                        if chunk.get('type') == 'content':
+                            content = chunk.get('content', '')
+                            content_buffer += content
+                            
+                            # 发送流式内容更新
+                            await self._send_status_update("chat_streaming", 
+                                message=f"生成中: {content_buffer}",
+                                partial_content=content,
+                                accumulated_content=content_buffer
+                            )
+                    
+                    if content_buffer.strip():
+                        final_output = content_buffer.strip()
+                        
+                except Exception as e:
+                    self.logger.warning(f"LLM流式回复失败，使用规则回复: {e}")
+                    final_output = self._generate_rule_based_chat_response(query)
+            elif self.llm and hasattr(self.llm, 'generate'):
+                try:
+                    # 回退到普通LLM生成
                     chat_prompt = f"""
 你是一个友好、专业的AI助手。用户说: "{query}"
 
@@ -291,7 +385,7 @@ class TaskEngine:
                     self.logger.warning(f"LLM闲聊回复失败，使用规则回复: {e}")
                     final_output = self._generate_rule_based_chat_response(query)
             else:
-                # LLM不可用时，使用规则回复
+                # LLM不可用时，使用规则回复（不模拟流式）
                 final_output = self._generate_rule_based_chat_response(query)
             
             return {
@@ -416,6 +510,15 @@ class TaskEngine:
 [用户查询]
 {query}
 
+工具选择指导原则：
+1. enhanced_report_generator：仅用于需要生成专业报告、分析报告、研究报告的场景
+   - 适用：明确要求"生成报告"、"分析总结"、"详细研究"等
+   - 不适用：简单信息查询、人物询问、概念解释等
+2. 搜索类工具（如baidu_search、web_search等）：用于信息查询、知识获取
+   - 适用：查询人物信息、历史事件、概念解释、实时信息等
+   - 首选用于回答"谁是XX"、"什么是XX"、"XX的信息"等查询
+3. 其他工具：根据具体功能选择，确保工具功能与用户需求匹配
+
 请生成JSON格式的执行计划，格式如下：
 {{
   "steps": [
@@ -436,6 +539,7 @@ class TaskEngine:
    - 特殊情况：如需其他数据可使用"data.secondary.字段名"或"message"
 3. 确保所有必需的参数都有合适的值
 4. 如果查询很简单，可以只用一个步骤
+5. 优先选择最适合的工具，避免过度复杂化
 
 通用设计原则：
 - 所有工具都遵循统一的输出格式，主要数据放在data.primary字段
@@ -627,6 +731,19 @@ class TaskEngine:
             step_start_time = time.time()
             
             try:
+                # 发送工具开始执行消息
+                tool_name = step['tool']
+                purpose = step.get('purpose', '执行中...')
+                step_id = f"task_{tool_name}_{i}_{int(time.time())}"  # 生成唯一的step_id
+                
+                await self._send_status_update("tool_start", 
+                    tool_name=tool_name,
+                    step_id=step_id,  # 添加step_id
+                    message=f"正在执行: {purpose}",
+                    step_index=i,
+                    total_steps=len(plan)
+                )
+                
                 # 解析依赖
                 resolved_params = self._resolve_dependencies(step, results)
                 
@@ -654,6 +771,9 @@ class TaskEngine:
                 except Exception:
                     pass
                 
+                # 判断执行状态
+                step_status = 'success' if result and not isinstance(result, dict) or not result.get('error') else 'error'
+                
                 # 记录执行步骤
                 execution_step = {
                     'step_index': i,
@@ -662,10 +782,20 @@ class TaskEngine:
                     'input_params': final_params,
                     'output': result,
                     'execution_time': time.time() - step_start_time,
-                    'status': 'success' if result and not isinstance(result, dict) or not result.get('error') else 'error'
+                    'status': step_status
                 }
                 
                 execution_steps.append(execution_step)
+                
+                # 发送工具执行结果消息
+                await self._send_status_update("tool_result", 
+                    tool_name=tool_name,
+                    step_id=step_id,  # 使用相同的step_id
+                    status=step_status,
+                    execution_time=time.time() - step_start_time,
+                    step_data=execution_step,
+                    message=f"{tool_name}: {step_status}"
+                )
                 
                 # 存储结果
                 results[str(i)] = {
@@ -692,6 +822,16 @@ class TaskEngine:
                 }
                 
                 execution_steps.append(execution_step)
+                
+                # 发送工具执行失败消息
+                await self._send_status_update("tool_result", 
+                    tool_name=step['tool'],
+                    step_id=step_id,  # 使用相同的step_id
+                    status='error',
+                    execution_time=time.time() - step_start_time,
+                    step_data=execution_step,
+                    message=f"{step['tool']}: error - {str(e)}"
+                )
                 
                 # 存储错误结果
                 results[str(i)] = {
@@ -1068,7 +1208,7 @@ class TaskEngine:
         return has_rich_data
     
     async def _generate_llm_summary(self, output: dict, input_params: dict, tool_name: str) -> str:
-        """使用LLM生成智能总结"""
+        """使用LLM生成智能总结 - 支持流式输出"""
         try:
             # 提取用户的原始查询
             user_query = input_params.get('query', '')
@@ -1119,7 +1259,39 @@ class TaskEngine:
 请提供完整而详细的回答：
 """
             
-            # 调用LLM
+            # 🎯 关键修复：使用流式生成
+            if hasattr(self.llm, 'generate_streaming'):
+                try:
+                    messages = [{"role": "user", "content": prompt}]
+                    content_buffer = ""
+                    
+                    # 发送任务流式生成开始状态
+                    await self._send_status_update("task_streaming", 
+                        message="正在生成任务总结...",
+                        partial_content="",
+                        accumulated_content=""
+                    )
+                    
+                    # 流式生成任务总结
+                    async for chunk in self.llm.generate_streaming(messages, max_tokens=600, temperature=0.3):
+                        if chunk.get('type') == 'content':
+                            content = chunk.get('content', '')
+                            content_buffer += content
+                            
+                            # 发送任务流式内容更新
+                            await self._send_status_update("task_streaming", 
+                                message=f"生成中: {content_buffer}",
+                                partial_content=content,
+                                accumulated_content=content_buffer
+                            )
+                    
+                    if content_buffer.strip():
+                        return content_buffer.strip()
+                        
+                except Exception as e:
+                    self.logger.warning(f"任务流式总结失败，回退到同步方法: {e}")
+            
+            # 回退到同步方法
             response = await self.llm.generate(prompt, max_tokens=600, temperature=0.3)
             
             if response and len(response.strip()) > 10:

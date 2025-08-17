@@ -44,6 +44,39 @@
           </svg>
         </button>
         <div class="chat-title">{{ currentChat?.title || '鹦鹉学舌' }}</div>
+        
+        <!-- 协议切换器 -->
+        <div v-if="showProtocolSwitcher" class="protocol-switcher">
+          <div class="protocol-status">
+            <span class="protocol-label">协议:</span>
+            <span class="protocol-current" :class="`protocol-${currentProtocol}`">
+              {{ currentProtocol.toUpperCase() }}
+            </span>
+          </div>
+          <div class="protocol-buttons">
+            <button 
+              class="protocol-btn" 
+              :class="{ active: currentProtocol === 'sse' }"
+              @click="switchProtocol('sse')"
+              title="切换到SSE协议"
+            >
+              SSE
+            </button>
+            <button 
+              class="protocol-btn" 
+              :class="{ active: currentProtocol === 'websocket' }"
+              @click="switchProtocol('websocket')"
+              title="切换到WebSocket协议"
+            >
+              WS
+            </button>
+          </div>
+        </div>
+        
+        <!-- 协议切换提示 -->
+        <div v-if="protocolSwitchMessage" class="protocol-message">
+          {{ protocolSwitchMessage }}
+        </div>
       </header>
 
       <!-- 对话区域 -->
@@ -95,8 +128,7 @@
                         <span class="chat-title">闲聊模式</span>
                       </div>
                       
-                      <div class="message-text" :class="{ 'streaming': message.isStreaming }">
-                        {{ message.content }}
+                      <div class="message-text" :class="{ 'streaming': message.isStreaming }" v-html="renderMarkdown(message.content)">
                       </div>
                       <div v-if="message.executionTime && message.executionTime > 0" class="execution-time">
                         响应时间: {{ message.executionTime.toFixed(2) }}秒
@@ -111,7 +143,7 @@
                         <span class="task-title">任务模式</span>
                         <div class="task-progress" v-if="message.nodeResults && message.nodeResults.length > 0">
                           开始执行
-                      </div>
+                        </div>
                       </div>
                       
                       <!-- ASCII 流程图显示 -->
@@ -126,12 +158,11 @@
                       </div>
                       
                       <!-- 最终结果 -->
-                      <div v-if="message.finalResult" class="final-result" v-html="message.finalResult"></div>
+                      <div v-if="message.finalResult" class="final-result" v-html="renderMarkdown(message.finalResult)"></div>
                     </div>
                     
                     <!-- 兼容旧格式 -->
-                  <div v-else class="message-text" :class="{ 'streaming': message.isStreaming }">
-                    {{ message.content }}
+                  <div v-else class="message-text" :class="{ 'streaming': message.isStreaming }" v-html="renderMarkdown(message.content)">
                   </div>
                   </div>
                   
@@ -141,15 +172,15 @@
                       <span class="tool-results-title">🔧 工具执行结果</span>
                       <span class="tool-results-count">{{ message.toolResults.length }} 个工具</span>
                     </div>
-                    <div v-for="tool in message.toolResults" :key="tool.node_id" class="tool-result-item">
+                    <div v-for="tool in message.toolResults" :key="tool.node_id || tool.toolName" class="tool-result-item">
                       <div class="tool-result-header">
                         <div class="tool-result-info">
-                          <span class="tool-result-type">{{ tool.tool_type }}</span>
-                          <span class="tool-result-time">{{ tool.execution_time.toFixed(2) }}秒</span>
+                          <span class="tool-result-type">{{ tool.tool_type || tool.toolName }}</span>
+                          <span class="tool-result-time">{{ (tool.execution_time || tool.executionTime || 0).toFixed(2) }}秒</span>
                           <span class="tool-result-status" :class="tool.status">{{ tool.status }}</span>
                         </div>
                       </div>
-                      <div class="tool-result-summary">{{ tool.result_summary }}</div>
+                      <div class="tool-result-summary">{{ tool.result_summary || tool.result }}</div>
                       <div v-if="tool.output && typeof tool.output === 'string' && tool.output.length > 0" class="tool-result-output">
                         <div class="tool-result-output-header">📄 输出内容:</div>
                         <div class="tool-result-output-content">{{ tool.output }}</div>
@@ -260,8 +291,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, nextTick, onMounted, onUnmounted, shallowRef, markRaw } from 'vue'
-import { WebSocketManager } from './websocket-manager'
+import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { CommunicationManager, type CommunicationCallbacks, type CommunicationMode } from './communication-manager'
 import { config } from './config'
 import { MessageHandler } from './message-handler'
 // 引入 Markdown 库
@@ -308,6 +339,16 @@ renderer.link = function(token: any): string {
 
 marked.setOptions({ renderer })
 
+// 添加Markdown渲染方法
+const renderMarkdown = (content: string): string => {
+  if (!content) return ''
+  try {
+    return marked.parse(content) as string
+  } catch (error) {
+    console.error('Markdown渲染失败:', error)
+    return content // 渲染失败时返回原始内容
+  }
+}
 
 // 执行计划管理器
 class ExecutionPlanManager {
@@ -347,7 +388,6 @@ class ExecutionPlanManager {
       ]
       
       let steps: any[] = []
-      let stepIndex = 0
       
       for (const pattern of patterns) {
         const matches = Array.from(message.matchAll(pattern))
@@ -366,15 +406,7 @@ class ExecutionPlanManager {
         }
       }
       
-      // 如果没有找到明确的步骤，创建默认计划
-      if (steps.length === 0 && (message.includes('执行') || message.includes('任务') || message.includes('处理'))) {
-        steps = [
-          { id: 'step_0', tool_name: 'task_analysis', description: '分析任务需求' },
-          { id: 'step_1', tool_name: 'data_processing', description: '处理相关数据' },
-          { id: 'step_2', tool_name: 'result_generation', description: '生成执行结果' }
-        ]
-      }
-      
+      // 不再创建默认执行计划，让后端动态推送步骤
       return steps.length > 0 ? { steps } : null
       
     } catch (error) {
@@ -414,8 +446,7 @@ class ExecutionPlanManager {
   
   // 更新步骤状态
   updateStepState(stepId: string, state: 'pending' | 'running' | 'success' | 'error') {
-    this.stepStates.set(stepId, state)
-    this.currentStep = state === 'running' ? stepId : this.currentStep
+    console.log(`🔄 updateStepState: ${stepId} -> ${state}`)
     
     // 如果步骤不存在，动态添加
     if (!this.stepStates.has(stepId) && this.plan) {
@@ -430,7 +461,24 @@ class ExecutionPlanManager {
         this.plan.steps = []
       }
       this.plan.steps.push(newStep)
+      console.log(`📋 动态添加步骤: ${stepId}`, newStep)
     }
+    
+    // 设置步骤状态
+    this.stepStates.set(stepId, state)
+    this.currentStep = state === 'running' ? stepId : this.currentStep
+    
+    console.log(`📊 当前步骤状态:`, Object.fromEntries(this.stepStates))
+  }
+  
+  // 新增：设置步骤状态的别名方法（兼容SSE）
+  setStepState(stepId: string, state: 'pending' | 'running' | 'success' | 'error') {
+    this.updateStepState(stepId, state)
+  }
+  
+  // 获取步骤状态
+  getStepStates(): Map<string, 'pending' | 'running' | 'success' | 'error'> {
+    return this.stepStates
   }
   
   // 获取执行进度
@@ -445,29 +493,162 @@ class ExecutionPlanManager {
   // 生成动态ASCII流程图
   generateAsciiDiagram(): string {
     if (!this.plan || !this.plan.steps || this.plan.steps.length === 0) {
-      return this.generateInitialDiagram()
+      return this.generateCoreExecutionDiagram()
     }
+    
+    return this.generateCoreExecutionDiagram()
+  }
+  
+  // 新增：生成Mermaid图表方法
+  generateMermaidDiagram(): string {
+    // 暂时返回ASCII图表，可以后续扩展为真正的Mermaid语法
+    return this.generateAsciiDiagram()
+  }
+  
+  // 生成核心执行流程图 - 简化版
+  generateCoreExecutionDiagram(): string {
+    const steps = this.plan?.steps || []
+    
+    // 找到关键步骤的状态
+    const llmAnalysisStep = steps.find((s: any) => s.id === 'llm_analysis') 
+    const toolsStep = steps.find((s: any) => s.id === 'tools_parallel')
+    const resultStep = steps.find((s: any) => s.id === 'result_output')
+    
+    // 获取实际执行的工具列表
+    const executedTools = this.getExecutedTools()
+    console.log('🎯 生成图表 - 当前工具:', this.currentStep, '执行的工具:', executedTools)
     
     let diagram = ''
     
-    // 分析当前执行状态
-    const stepStates = this.analyzeStepStates()
+    // 1. 用户输入 (总是成功)
+    const userIcon = this.getStepIcon('user_input', 'success')
+    diagram += `    ${userIcon} 用户输入\n`
+    diagram += `         │\n`
+    diagram += `         ▼\n`
     
-    // 根据执行进度决定显示的步骤数
-    const visibleSteps = this.getVisibleSteps(stepStates)
+    // 2. LLM分析 (当有工具执行时应该是成功状态)
+    const llmStatus = executedTools.length > 0 || this.currentStep ? 'success' : (llmAnalysisStep?.status || 'running')
+    const llmIcon = this.getStepIcon('llm_analysis', llmStatus)
+    const llmLine = this.getConnectionLine(llmStatus)
+    diagram += `    ${llmIcon} LLM分析\n`
+    diagram += `         ${llmLine}\n`
+    diagram += `         ▼\n`
     
-    // 构建基础结构
-    diagram += this.buildBasicStructure()
+    // 3. 工具执行部分（总是显示）
+    let toolName = '工具执行'
+    let toolStatus = 'pending'
+    let toolIconKey = 'tool_execution'
     
-    // 如果有可见步骤，构建工具执行部分
-    if (visibleSteps.length > 0) {
-      diagram += this.buildToolsSection(visibleSteps, stepStates)
+    if (executedTools.length > 0) {
+      // 显示实际执行的工具
+      toolName = executedTools[0]
+      toolStatus = toolsStep?.status || 'running'
+      // 根据工具名称选择图标
+      if (toolName.includes('搜索')) {
+        toolIconKey = 'smart_search'
+      } else if (toolName.includes('文件')) {
+        toolIconKey = 'file_read'
+      } else {
+        toolIconKey = 'generic_tool'
+      }
+    } else if (this.currentStep) {
+      // 使用currentStep显示当前工具
+      toolName = this.currentStep
+      toolStatus = 'running'
+      toolIconKey = this.currentStep
+    } else {
+      // 默认状态
+      toolStatus = toolsStep?.status || 'pending'
     }
     
-    // 构建最终状态
-    diagram += this.buildFinalStatus(stepStates)
+    const toolIcon = this.getStepIcon(toolIconKey, toolStatus)
+    const toolLine = this.getConnectionLine(toolStatus)
+    diagram += `    ${toolIcon} ${toolName}\n`
+    diagram += `         ${toolLine}\n`
+    diagram += `         ▼\n`
+    
+    // 4. 结果输出
+    const resultStatus = resultStep?.status || 'pending'
+    const resultIcon = this.getStepIcon('result_output', resultStatus)
+    diagram += `    ${resultIcon} 结果输出\n`
     
     return diagram
+  }
+  
+  // 构建并排工具执行部分
+  buildParallelToolsSection(tools: string[]): string {
+    if (tools.length === 1) {
+      // 单个工具
+      const toolIcon = this.getStepIcon(tools[0], 'running')
+      const toolLine = this.getConnectionLine('running')
+      return `    ${toolIcon} ${tools[0]}\n         ${toolLine}\n         ▼\n`
+    }
+    
+    // 多个工具并排显示
+    let section = ''
+    
+    // 分支开始
+    section += `         ├─────────┐\n`
+    
+    // 并排工具
+    tools.forEach((tool, index) => {
+      const toolIcon = this.getStepIcon(tool, 'running')
+      const isLast = index === tools.length - 1
+      
+      if (index === 0) {
+        section += `    ${toolIcon} ${tool}`
+      } else {
+        section += `  ${toolIcon} ${tool}`
+      }
+      
+      if (!isLast) {
+        section += `\n         │         │\n`
+      } else {
+        section += `\n`
+      }
+    })
+    
+    // 分支合并
+    section += `         └─────────┘\n`
+    section += `              ▼\n`
+    
+    return section
+  }
+  
+  // 获取已执行的工具列表
+  getExecutedTools(): string[] {
+    const tools: string[] = []
+    
+    // 从currentStep获取实际执行的工具
+    if (this.currentStep) {
+      console.log('🔍 当前工具步骤:', this.currentStep)
+      
+      // 工具名称映射
+      const toolNameMap: { [key: string]: string } = {
+        'smart_search': '智能搜索',
+        'web_search': '网络搜索', 
+        'file_read': '文件读取',
+        'file_write': '文件写入',
+        'data_analysis': '数据分析',
+        'general_tool': '通用工具'
+      }
+      
+      // 直接匹配工具名或包含匹配
+      for (const [key, displayName] of Object.entries(toolNameMap)) {
+        if (this.currentStep === key || this.currentStep.includes(key)) {
+          tools.push(displayName)
+          break
+        }
+      }
+      
+      // 如果没有匹配到，使用原始名称
+      if (tools.length === 0) {
+        tools.push(this.currentStep)
+      }
+    }
+    
+    console.log('🔧 获取到的工具列表:', tools)
+    return tools
   }
   
   // 生成初始状态图表
@@ -475,10 +656,27 @@ class ExecutionPlanManager {
     return `    👤 用户输入
          │
          ▼
-    🧠 LLM分析
+    🧠 模式检测
          │
          ▼
-    📋 准备就绪`
+    📋 制定计划
+         │
+         ▼
+    ⏳ 准备执行`
+  }
+  
+  // 生成默认任务执行流程图 - 修复连接线显示
+  generateDefaultTaskDiagram(): string {
+    return `    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         ┇  ← 虚线：步骤未完成
+         ▼
+    ⏳ 准备工具执行
+         ┇  ← 虚线：步骤未开始
+         ▼
+    ✅ 任务完成`
   }
   
   // 分析步骤执行状态
@@ -539,43 +737,46 @@ class ExecutionPlanManager {
     return `    👤 用户输入
          │
          ▼
-    🧠 LLM分析\n`
+    🧠 LLM分析\\n`
         }
   
   // 构建工具执行部分
-  buildToolsSection(visibleSteps: any[], stepStates: any): string {
+  buildToolsSection(visibleSteps: any[]): string {
     let section = ''
     
     if (visibleSteps.length === 1) {
       // 单工具场景
-      section += this.buildSingleToolFlow(visibleSteps[0], 0, stepStates)
+      section += this.buildSingleToolFlow(visibleSteps[0], 0)
       } else {
       // 多工具场景 - 采用流水线式显示
-      section += this.buildPipelineFlow(visibleSteps, stepStates)
+      section += this.buildPipelineFlow(visibleSteps)
     }
     
     return section
   }
   
   // 构建单工具流程
-  buildSingleToolFlow(step: any, index: number, stepStates: any): string {
+  buildSingleToolFlow(step: any, index: number): string {
     const stepId = step.tool_name || step.id || `step_${index}`
     const state = this.stepStates.get(stepId) || 'pending'
     
     const stateIcon = this.getStateIcon(state)
     const toolIcon = this.getToolIcon(step.tool_name || stepId)
     const toolName = this.getCleanToolName(step.tool_name || stepId)
-    const connectionLine = this.getConnectionLine(state)
+    
+    // 连接线应该表示从当前步骤到下一步骤的连接状态
+    // 如果当前步骤已完成(success)，则连接线为实线，否则为虚线
+    const connectionLine = state === 'success' ? '│' : '┇'
     
     return `         │
          ▼
   ${stateIcon} ${toolIcon} ${toolName}
          ${connectionLine}
-         ▼\n`
+         ▼\\n`
   }
   
   // 构建流水线式流程（适用于多工具）
-  buildPipelineFlow(visibleSteps: any[], stepStates: any): string {
+  buildPipelineFlow(visibleSteps: any[]): string {
     let section = ''
     
     visibleSteps.forEach((step: any, index: number) => {
@@ -585,24 +786,27 @@ class ExecutionPlanManager {
       const stateIcon = this.getStateIcon(state)
       const toolIcon = this.getToolIcon(step.tool_name || stepId)
       const toolName = this.getCleanToolName(step.tool_name || stepId)
-      const connectionLine = this.getConnectionLine(state)
+      
+      // 连接线应该表示从当前步骤到下一步骤的连接状态
+      // 如果当前步骤已完成(success)，则连接线为实线，否则为虚线
+      const connectionLine = state === 'success' ? '│' : '┇'
       
       if (index === 0) {
         section += `         │
-         ▼\n`
+         ▼\\n`
       }
       
       // 工具执行节点
-      section += `  ${stateIcon} ${toolIcon} ${toolName}\n`
+      section += `  ${stateIcon} ${toolIcon} ${toolName}\\n`
       
       // 如果不是最后一个步骤，添加连接线
       if (index < visibleSteps.length - 1) {
         section += `         ${connectionLine}
-         ▼\n`
+         ▼\\n`
         } else {
         // 最后一个步骤，准备连接到最终状态
         section += `         ${connectionLine}
-         ▼\n`
+         ▼\\n`
         }
     })
     
@@ -719,6 +923,35 @@ class ExecutionPlanManager {
     this.stepStates.clear()
   }
   
+  // 检查是否已有指定的步骤
+  hasStep(toolName: string): boolean {
+    if (!this.plan || !this.plan.steps) return false
+    return this.plan.steps.some((step: any) => 
+      step.tool_name === toolName || step.id === toolName || step.name === toolName
+    )
+  }
+  
+  // 动态添加步骤
+  addStep(step: any): void {
+    if (!this.plan) {
+      this.plan = { steps: [] }
+    }
+    if (!this.plan.steps) {
+      this.plan.steps = []
+    }
+    
+    const stepId = step.id || step.tool_name || step.name || `step_${this.plan.steps.length}`
+    
+    // 避免重复添加
+    if (!this.hasStep(stepId)) {
+      this.plan.steps.push({
+        ...step,
+        id: stepId
+      })
+      this.stepStates.set(stepId, step.status || 'pending')
+    }
+  }
+  
   // 获取步骤图标
   private getStepIcon(toolName: string, state: string): string {
     const stateIcons = {
@@ -730,31 +963,43 @@ class ExecutionPlanManager {
     
     const toolIcons: { [key: string]: string } = {
       'web_search': '🔍',
+      'smart_search': '🔍',
       'file_read': '📄',
       'file_write': '✏️',
       'code_execute': '⚡',
       'data_analysis': '📊',
       'api_call': '🌐',
       'task_analysis': '🧠',
+      'llm_analysis': '🧠',
+      'user_input': '👤',
       'data_processing': '⚙️',
       'result_generation': '📋',
-      'generic_tool': '🔧'
+      'result_output': '📄',
+      'generic_tool': '🔧',
+      'tool_execution': '🔧'
     }
     
-    if (state === 'running') {
-      return stateIcons.running
+    // 优先使用工具图标，如果没有找到则使用状态图标
+    const toolIcon = toolIcons[toolName]
+    if (toolIcon) {
+      return toolIcon
     }
     
-    if (state === 'error') {
-      return stateIcons.error
-    }
-    
-    if (state === 'success') {
-      return stateIcons.success
-    }
-    
-    return toolIcons[toolName] || stateIcons.pending
+    // 如果没有对应的工具图标，使用状态图标
+    return stateIcons[state as keyof typeof stateIcons] || stateIcons.pending
   }
+  
+  // 设置当前执行的工具
+  setCurrentTool(toolName: string) {
+    this.currentStep = toolName
+    console.log('🔧 设置当前工具:', toolName)
+  }
+  
+  // 获取当前步骤状态（用于调试）- 重命名以避免重复
+  getStepStatesObject() {
+    return Object.fromEntries(this.stepStates)
+  }
+
 }
 
 // 创建执行计划管理器实例
@@ -764,42 +1009,42 @@ const executionPlanManager = new ExecutionPlanManager()
 // 添加动态动画到mermaid节点
 
 // 更新执行计划图表
-const updateExecutionPlan = async (messageId: string, plan?: any, stepId?: string, stepState?: string) => {
-  console.log('🔄 updateExecutionPlan 调用:', { messageId, plan, stepId, stepState })
-  
-  // 如果有新的计划数据，初始化执行计划
-  if (plan) {
-    console.log('📋 初始化执行计划:', plan)
-    executionPlanManager.initPlan(plan)
-  }
-  
-  // 更新步骤状态
-  if (stepId && stepState) {
-    console.log('📊 更新步骤状态:', { stepId, stepState })
-    executionPlanManager.updateStepState(stepId, stepState as 'pending' | 'running' | 'success' | 'error')
-  }
-  
-  // 生成最新的ASCII图表
-  const diagramCode = executionPlanManager.generateAsciiDiagram()
-  console.log('📊 生成的ASCII图表:', diagramCode)
-  
-  // 更新消息中的ASCII图表
-  if (currentChat.value) {
-    const currentMessage = currentChat.value.messages.find(m => m.id === messageId)
-    if (currentMessage) {
-      console.log('💾 更新消息中的ASCII图表')
-      updateMessage(currentChat.value.id, messageId, {
-        asciiDiagram: diagramCode
-      })
-      
-      // 延迟渲染，确保DOM已更新
-      await nextTick()
-      setTimeout(() => {
-        console.log('✅ ASCII图表更新完成')
-      }, 100)
-    }
-  }
-}
+// const updateExecutionPlan = async (messageId: string, plan?: any, stepId?: string, stepState?: string) => {
+//   console.log('🔄 updateExecutionPlan 调用:', { messageId, plan, stepId, stepState })
+//   
+//   // 如果有新的计划数据，初始化执行计划
+//   if (plan) {
+//     console.log('📋 初始化执行计划:', plan)
+//     executionPlanManager.initPlan(plan)
+//   }
+//   
+//   // 更新步骤状态
+//   if (stepId && stepState) {
+//     console.log('📊 更新步骤状态:', { stepId, stepState })
+//     executionPlanManager.updateStepState(stepId, stepState as 'pending' | 'running' | 'success' | 'error')
+//   }
+//   
+//   // 生成最新的ASCII图表
+//   const diagramCode = executionPlanManager.generateAsciiDiagram()
+//   console.log('📊 生成的ASCII图表:', diagramCode)
+//   
+//   // 更新消息中的ASCII图表
+//   if (currentChat.value) {
+//     const currentMessage = currentChat.value.messages.find(m => m.id === messageId)
+//     if (currentMessage) {
+//       console.log('💾 更新消息中的ASCII图表')
+//       updateMessage(currentChat.value.id, messageId, {
+//         asciiDiagram: diagramCode
+//       })
+//       
+//       // 延迟渲染，确保DOM已更新
+//       await nextTick()
+//       setTimeout(() => {
+//         console.log('✅ ASCII图表更新完成')
+//       }, 100)
+//     }
+//   }
+// }
 
 // 消息接口
 interface Message {
@@ -812,20 +1057,26 @@ interface Message {
   isStreaming?: boolean       // 是否正在流式输出
   mode?: 'chat' | 'task'     // 新增：消息模式
   asciiDiagram?: string      // ASCII 图表
+  mermaidDiagram?: string    // 新增：Mermaid 图表
   nodeResults?: any[]        // 新增：节点执行结果
   finalResult?: string       // 新增：最终结果
   executionTime?: number     // 新增：执行时间
+  executionPlan?: any        // 新增：执行计划
 }
 
-// 新增：工具执行结果接口
+// 新增：工具执行结果接口 - 扩展以支持SSE
 interface ToolResult {
-  node_id: string
-  tool_type: string
-  result_summary: string
-  execution_time: number
-  output: any
-  status: string
-  timestamp: Date
+  node_id?: string           // 兼容旧版
+  toolName?: string          // 新增：工具名称
+  tool_type?: string         // 兼容旧版
+  result_summary?: string    // 兼容旧版
+  result?: string            // 新增：结果内容
+  execution_time?: number    // 执行时间
+  executionTime?: number     // 兼容字段
+  output?: any               // 输出内容
+  status?: string            // 状态
+  timestamp?: Date           // 时间戳
+  stepId?: string            // 新增：步骤ID
 }
 
 interface SearchResult {
@@ -876,11 +1127,41 @@ const updateMessage = (chatId: string, messageId: string, updates: Partial<Messa
   }
 }
 
-// WebSocket管理器
-let wsManager: WebSocketManager | null = null
+// 🎯 文件上传结果检测器
+let fileUploadObserver: MutationObserver | null = null
+
+const checkFileUploadResults = () => {
+  const messageTexts = document.querySelectorAll('.chat-message-content .message-text')
+  messageTexts.forEach(element => {
+    const content = element.textContent || element.innerHTML
+    
+    // 检测是否包含文件上传相关内容
+    if (
+      content.includes('成功上传') || 
+      content.includes('文件列表') ||
+      element.querySelector('a[href*="minio"]') ||
+      element.querySelector('a[href*="amazonaws"]') ||
+      content.includes('rotated_image_') ||
+      content.includes('有效期:')
+    ) {
+      if (!element.classList.contains('file-upload-result')) {
+        element.classList.add('file-upload-result')
+        console.log('🎯 检测到文件上传结果，应用特殊样式')
+      }
+    }
+  })
+}
+
+// 通信管理器
+let commManager: CommunicationManager | null = null
 
 // 消息处理器
 let messageHandler: MessageHandler | null = null
+
+// 添加协议切换相关的响应式变量
+const currentProtocol = ref<CommunicationMode>('sse')
+const protocolSwitchMessage = ref<string>('')
+const showProtocolSwitcher = ref(config.features.protocolSwitching)
 
 // 计算属性
 const currentChat = computed(() => {
@@ -920,6 +1201,28 @@ const loadChat = (chatId: string) => {
   nextTick(() => {
     scrollToBottom()
   })
+}
+
+// 添加协议切换方法
+const switchProtocol = async (newProtocol: CommunicationMode) => {
+  if (!commManager) {
+    console.error('❌ 通信管理器未初始化')
+    return
+  }
+
+  try {
+    console.log(`🔄 手动切换协议到: ${newProtocol}`)
+    await commManager.switchMode(newProtocol)
+    protocolSwitchMessage.value = `已切换到 ${newProtocol} 协议`
+    
+    // 3秒后清除提示信息
+    setTimeout(() => {
+      protocolSwitchMessage.value = ''
+    }, 3000)
+  } catch (error) {
+    console.error('❌ 协议切换失败:', error)
+    protocolSwitchMessage.value = `协议切换失败: ${error}`
+  }
 }
 
 const handleSendMessage = async () => {
@@ -982,294 +1285,239 @@ const handleSendMessage = async () => {
   })
   
   try {
-    // 创建WebSocket管理器
-    wsManager = new WebSocketManager(config.websocket.url, {
-      onConnect: () => {
-        console.log('🔗 MCP WebSocket连接成功')
-        
-        // 发送用户输入
-        try {
-          wsManager?.send({
-            user_input: userInput,
-            session_id: null  // 让服务端生成新的session_id
-          })
-        } catch (error) {
-          updateMessage(currentChat.value!.id, aiMessage.id, {
-            content: `❌ 发送消息失败: ${error}`,
-            isStreaming: false
-          })
-          isLoading.value = false
-        }
-      },
-      
-      onModeDetection: (mode: string, sessionId: string, message: string) => {
-        // 模式检测结果
-        if (currentChat.value) {
-          updateMessage(currentChat.value.id, aiMessage.id, {
-            mode: mode as 'chat' | 'task',
-            content: message,
-            isStreaming: true
-          })
-        }
-      },
-      
-      onChatResponse: (chatResponse: string, executionTime?: number) => {
-        // 闲聊模式处理
-        if (currentChat.value) {
-          updateMessage(currentChat.value.id, aiMessage.id, {
-            mode: 'chat',
-            content: '',
-            isStreaming: true,
-            executionTime: executionTime
-          })
-          
-          // 模拟流式输出效果
-          let currentIndex = 0
-          const streamInterval = setInterval(() => {
-            if (currentIndex < chatResponse.length) {
-              const currentContent = chatResponse.substring(0, currentIndex + 1)
-              updateMessage(currentChat.value!.id, aiMessage.id, {
-                content: currentContent,
-                isStreaming: true
-              })
-              currentIndex++
-              
-              nextTick(() => {
-                scrollToBottom()
-              })
-            } else {
-              clearInterval(streamInterval)
-              updateMessage(currentChat.value!.id, aiMessage.id, {
-                content: chatResponse,
-                isStreaming: false
-              })
-              isLoading.value = false
-            }
-          }, 30)
-        }
-      },
-      
-      onTaskStart: (message: string, asciiDiagram?: string) => {
-        // 任务模式开始
-        if (currentChat.value) {
-          // 异步处理 Markdown 解析
-          const processMarkdown = async () => {
-            const parsedContent = await marked.parse(message)
-            
-            // 尝试从消息中解析执行计划
-            let planData = null
-            try {
-              // 使用智能解析功能
-              planData = executionPlanManager.parseExecutionPlan(message)
-              
-              console.log('📋 解析到的执行计划:', planData)
-              
-            } catch (error) {
-              console.warn('执行计划解析失败:', error)
-            }
-            
-            updateMessage(currentChat.value!.id, aiMessage.id, {
-              mode: 'task',
-              content: parsedContent,
-              asciiDiagram: asciiDiagram,
-              isStreaming: true,
-              nodeResults: []
-            })
-            
-            // 初始化动态执行计划
-            if (planData) {
-              await updateExecutionPlan(aiMessage.id, planData)
-            } else if (asciiDiagram) {
-              // 如果有 ASCII 图表但没有计划数据，使用原来的渲染方式
-              await nextTick()
-              setTimeout(() => {
-              }, 100)
-            }
-          }
-          
-          processMarkdown()
-        }
-      },
-      
-      onToolStart: (message: string, toolName?: string) => {
-        console.log('🔧 工具开始执行:', { toolName, message })
-        
-        // 工具开始执行
-        if (currentChat.value) {
-          const currentMessage = currentChat.value.messages.find(m => m.id === aiMessage.id)
-          if (currentMessage) {
-            // 确保nodeResults存在
-            if (!currentMessage.nodeResults) {
-              currentMessage.nodeResults = []
-            }
-            
-            // 添加一个"正在执行"的步骤状态
-            const runningStep = {
-              tool_name: toolName || '工具',
-              status: 'running',  // 改为running状态
-              message: message,
-              execution_time: 0,
-              markdownContent: `### 🔄 ${toolName || '工具'}\n\n**状态**: 正在执行...\n**信息**: ${message}`
-            }
-            
-            currentMessage.nodeResults.push(runningStep)
-            
-            // 更新执行计划图表 - 设置当前工具为运行状态
-            console.log('📊 更新执行计划状态:', { toolName, state: 'running' })
-            updateExecutionPlan(aiMessage.id, undefined, toolName || 'step1', 'running')
-            
-            // 强制触发Vue响应式更新
-            updateMessage(currentChat.value.id, aiMessage.id, {
-              nodeResults: [...currentMessage.nodeResults]
-            })
-            
-            // 滚动到底部显示最新工具状态
-            nextTick(() => {
-              scrollToBottom()
-            })
-          }
-        }
-      },
-      
-      onToolResult: (stepData: any, asciiDiagram?: string) => {
-        console.log('✅ 工具执行完成:', { stepData })
-        
-        // 工具执行结果
-        if (currentChat.value) {
-          const currentMessage = currentChat.value.messages.find(m => m.id === aiMessage.id)
-          if (currentMessage && currentMessage.nodeResults) {
-            // 查找是否有对应的running步骤需要更新
-            const runningStepIndex = currentMessage.nodeResults.findIndex(
-              step => step.tool_name === stepData.tool_name && step.status === 'running'
-            )
-            
-            // 为步骤数据添加markdown内容
-            const stepWithMarkdown = {
-              ...stepData,
-              markdownContent: `### ${stepData.status === 'success' ? '✅' : '❌'} ${stepData.tool_name}\n\n**状态**: ${stepData.status === 'success' ? '完成' : '失败'}\n**用时**: ${stepData.execution_time?.toFixed(2) || '0.00'}秒\n\n**执行结果**:\n\`\`\`json\n${JSON.stringify(stepData.output, null, 2)}\n\`\`\``
-            }
-            
-            if (runningStepIndex !== -1) {
-              // 更新现有的running步骤
-              currentMessage.nodeResults[runningStepIndex] = stepWithMarkdown
-            } else {
-              // 没有找到对应的running步骤，直接添加
-              currentMessage.nodeResults.push(stepWithMarkdown)
-            }
-            
-            // 更新执行计划图表 - 设置工具执行状态
-            const stepState = stepData.status === 'success' ? 'success' : 
-                            stepData.status === 'error' ? 'error' : 'success'
-            
-            console.log('📊 更新工具完成状态:', { toolName: stepData.tool_name, stepState })
-            updateExecutionPlan(aiMessage.id, undefined, stepData.tool_name, stepState)
-            
-            // 强制触发Vue响应式更新
-              updateMessage(currentChat.value.id, aiMessage.id, {
-                nodeResults: [...currentMessage.nodeResults]
-              })
-          }
-        }
-      },
-      
-      onTaskComplete: (message: string, executionTime?: number, asciiDiagram?: string, steps?: any[]) => {
-        console.log('🏁 任务完成:', { message, executionTime, steps })
-        
-        // 任务完成
-        if (currentChat.value) {
-          const currentMessage = currentChat.value.messages.find(m => m.id === aiMessage.id)
-          if (currentMessage) {
-            // 异步处理 Markdown 解析
-            const processMarkdown = async () => {
-              const parsedResult = await marked.parse(message)
-              const updates: any = {
-                finalResult: parsedResult,
-                executionTime: executionTime,
-                isStreaming: false
-              }
-              
-              // 如果有最终的ASCII图表，使用它
-              if (asciiDiagram) {
-                updates.asciiDiagram = asciiDiagram
-              } else {
-                // 处理后端传来的真实steps数据
-                if (steps && steps.length > 0) {
-                  console.log('📊 处理真实steps数据:', steps)
-                  
-                  // 首先初始化执行计划（使用真实的步骤数据）
-                  const realPlan = { steps: steps }
-                  console.log('🔄 初始化真实执行计划:', realPlan)
-                  await updateExecutionPlan(aiMessage.id, realPlan)
-                  
-                  // 将所有步骤标记为成功
-                  for (const step of steps) {
-                    const toolName = step.tool_name || step.id
-                    console.log('✅ 标记步骤完成:', toolName)
-                    await updateExecutionPlan(aiMessage.id, undefined, toolName, 'success')
-                  }
-                  
-                  // 生成最终的ASCII图表
-                  const finalDiagram = executionPlanManager.generateAsciiDiagram()
-                  console.log('📋 生成最终ASCII图表:', finalDiagram)
-                  updates.asciiDiagram = finalDiagram
-                } else {
-                  // 如果没有steps数据，生成简单的完成图表
-                  const completedDiagram = `    👤 用户输入
-         │
-         ▼
-    🧠 LLM分析
-         │
-         ▼
-    ✅ 任务完成`
-                  
-                  updates.asciiDiagram = completedDiagram
-                }
-              }
-              
-              // 更新消息
-              updateMessage(currentChat.value!.id, aiMessage.id, updates)
-              
-              // 滚动到底部
-              nextTick(() => {
-                scrollToBottom()
-              })
-            }
-            
-            processMarkdown()
-          }
-        }
-        
-        isLoading.value = false
-      },
-      
-      onError: (message: string, iteration?: number) => {
-        let errorMessage = `❌ 执行错误: ${message}`
-        if (iteration) {
-          errorMessage += ` (迭代 ${iteration})`
-        }
-        
-        updateMessage(currentChat.value!.id, aiMessage.id, {
-          content: errorMessage,
-          isStreaming: false
-        })
-        isLoading.value = false
-      },
-      
-      onDisconnect: (code, reason) => {
-        console.log('🔌 MCP WebSocket连接关闭:', code, reason)
-        isLoading.value = false
-      }
-    })
+    // 如果通信管理器不存在，创建新的
+    if (!commManager) {
+      await initializeCommunication()
+    }
     
-    // 连接WebSocket
-    await wsManager.connect()
+    // 设置会话ID
+    const sessionId = currentChat.value!.id
+    commManager?.setSessionId(sessionId)
+    
+    // 发送用户输入
+    await commManager!.sendMessage(userInput, sessionId)
     
   } catch (error) {
     console.error('发送消息失败:', error)
-    aiMessage.content = `❌ 连接失败: ${error instanceof Error ? error.message : String(error)}`
+    aiMessage.content = "❌ 连接失败: " + (error instanceof Error ? error.message : String(error))
     aiMessage.isStreaming = false
     isLoading.value = false
   }
+}
+
+// 初始化通信管理器
+const initializeCommunication = async () => {
+  const callbacks: CommunicationCallbacks = {
+    onConnect: () => {
+      console.log('🔗 通信连接成功')
+      currentProtocol.value = commManager?.getCurrentMode() || 'sse'
+    },
+    
+    onModeDetection: (mode: string, sessionId: string, message: string) => {
+      console.log('🎯 模式检测结果:', { mode, sessionId, message })
+      
+      // 找到当前聊天和对应的AI消息
+      if (currentChat.value) {
+        const lastMessage = currentChat.value.messages[currentChat.value.messages.length - 1]
+        if (lastMessage && lastMessage.role === 'assistant') {
+          const updates: any = {
+            mode: mode as 'chat' | 'task',
+            content: message,
+            isStreaming: true
+          }
+          
+          // 如果是任务模式，初始化执行计划
+          if (mode === 'task') {
+            const coreExecutionPlan = {
+              steps: [
+                { id: 'user_input', tool_name: 'user_input', description: '用户输入', status: 'success' },
+                { id: 'llm_analysis', tool_name: 'llm_analysis', description: 'LLM分析', status: 'running' },
+                { id: 'tools_parallel', tool_name: 'tools_execution', description: '工具执行', status: 'pending', isParallel: true },
+                { id: 'result_output', tool_name: 'result_generation', description: '结果输出', status: 'pending' }
+              ]
+            }
+            
+            executionPlanManager.initPlan(coreExecutionPlan)
+            console.log('📊 初始化核心执行计划（简化版）')
+            
+            updates.executionPlan = coreExecutionPlan
+            updates.mermaidDiagram = executionPlanManager.generateMermaidDiagram()
+          }
+          
+          updateMessage(currentChat.value.id, lastMessage.id, updates)
+        }
+      }
+    },
+    
+    onChatResponse: (message: string, executionTime?: number, isStreaming?: boolean) => {
+      console.log('💬 收到聊天响应:', message, '流式:', isStreaming)
+      
+      if (currentChat.value) {
+        const lastMessage = currentChat.value.messages[currentChat.value.messages.length - 1]
+        if (lastMessage && lastMessage.role === 'assistant') {
+          updateMessage(currentChat.value.id, lastMessage.id, {
+            content: message,
+            isStreaming: isStreaming || false, // 如果是流式更新，保持流式状态
+            executionTime
+          })
+        }
+      }
+      
+      // 只有在非流式更新或流式完成时才停止loading
+      if (!isStreaming) {
+        isLoading.value = false
+      }
+    },
+    
+    onTaskPlanning: (message: string) => {
+      console.log('🧠 收到任务规划消息:', message)
+      // 可以在这里显示任务规划的进度
+    },
+    
+    onTaskStart: (message: string, mermaidDiagram?: string, plan?: any) => {
+      console.log('🚀 收到任务开始消息:', message)
+      
+      if (currentChat.value) {
+        const lastMessage = currentChat.value.messages[currentChat.value.messages.length - 1]
+        if (lastMessage && lastMessage.role === 'assistant') {
+          const updates: any = {
+            content: message,
+            isStreaming: true
+          }
+          
+          if (mermaidDiagram) {
+            updates.mermaidDiagram = mermaidDiagram
+          }
+          
+          if (plan) {
+            executionPlanManager.initPlan(plan)
+            updates.executionPlan = plan
+          }
+          
+          updateMessage(currentChat.value.id, lastMessage.id, updates)
+        }
+      }
+    },
+    
+    onToolStart: (message: string, toolName?: string, stepIndex?: number, totalSteps?: number, stepId?: string) => {
+      console.log('⚙️ 收到工具开始消息:', message, { toolName, stepIndex, totalSteps, stepId })
+      
+      if (toolName && stepId) {
+        executionPlanManager.setStepState(stepId, 'running')
+        
+        if (currentChat.value) {
+          const lastMessage = currentChat.value.messages[currentChat.value.messages.length - 1]
+          if (lastMessage && lastMessage.role === 'assistant') {
+            updateMessage(currentChat.value.id, lastMessage.id, {
+              mermaidDiagram: executionPlanManager.generateMermaidDiagram()
+            })
+          }
+        }
+      }
+    },
+    
+    onToolResult: (stepData: any, status?: string, toolName?: string) => {
+      console.log('📋 收到工具结果:', stepData, { status, toolName })
+      
+      if (stepData && stepData.id) {
+        const stepStatus = status === 'success' ? 'success' : 'error'
+        executionPlanManager.setStepState(stepData.id, stepStatus)
+        
+        if (currentChat.value) {
+          const lastMessage = currentChat.value.messages[currentChat.value.messages.length - 1]
+          if (lastMessage && lastMessage.role === 'assistant') {
+            const currentResults = lastMessage.toolResults || []
+            currentResults.push({
+              toolName: stepData.tool_name || toolName || 'unknown',
+              result: stepData.result || stepData.output || '',
+              status: stepStatus,
+              executionTime: stepData.execution_time || 0,
+              stepId: stepData.id
+            })
+            
+            updateMessage(currentChat.value.id, lastMessage.id, {
+              toolResults: currentResults,
+              mermaidDiagram: executionPlanManager.generateMermaidDiagram()
+            })
+          }
+        }
+      }
+    },
+    
+    onTaskComplete: (message: string, executionTime?: number, mermaidDiagram?: string, steps?: any[], isStreaming?: boolean) => {
+      console.log('🏁 收到任务完成消息:', message, '流式:', isStreaming)
+      
+      if (currentChat.value) {
+        const lastMessage = currentChat.value.messages[currentChat.value.messages.length - 1]
+        if (lastMessage && lastMessage.role === 'assistant') {
+          const updates: any = {
+            content: message,
+            isStreaming: isStreaming || false, // 如果是流式更新，保持流式状态
+            executionTime
+          }
+          
+          if (mermaidDiagram) {
+            updates.mermaidDiagram = mermaidDiagram
+          }
+          
+          // 如果有步骤信息，也保存到消息中
+          if (steps && steps.length > 0) {
+            updates.nodeResults = steps
+          }
+          
+          updateMessage(currentChat.value.id, lastMessage.id, updates)
+        }
+      }
+      
+      // 只有在非流式更新或流式完成时才停止loading
+      if (!isStreaming) {
+        isLoading.value = false
+      }
+    },
+    
+    onError: (message: string, iteration?: number) => {
+      console.error('❌ 收到错误消息:', message)
+      
+      if (currentChat.value) {
+        const lastMessage = currentChat.value.messages[currentChat.value.messages.length - 1]
+        if (lastMessage && lastMessage.role === 'assistant') {
+          let errorMessage = `❌ ${message}`
+          if (iteration !== undefined) {
+            errorMessage += ` (迭代 ${iteration})`
+          }
+          
+          updateMessage(currentChat.value.id, lastMessage.id, {
+            content: errorMessage,
+            isStreaming: false
+          })
+        }
+      }
+      isLoading.value = false
+    },
+    
+    onDisconnect: () => {
+      console.log('🔌 通信连接断开')
+      isLoading.value = false
+    },
+    
+    onModeSwitch: (newMode: CommunicationMode, reason?: string) => {
+      console.log('🔄 协议切换:', newMode, reason)
+      currentProtocol.value = newMode
+      protocolSwitchMessage.value = reason ? `${reason} - 已切换到 ${newMode}` : `已切换到 ${newMode}`
+      
+      // 3秒后清除提示信息
+      setTimeout(() => {
+        protocolSwitchMessage.value = ''
+      }, 3000)
+    }
+  }
+  
+  // 创建通信管理器
+  commManager = new CommunicationManager(callbacks)
+  await commManager.initialize()
+  
+  // 更新当前协议状态
+  currentProtocol.value = commManager.getCurrentMode()
 }
 
 const adjustTextarea = () => {
@@ -1316,16 +1564,6 @@ const toggleSearchPanel = () => {
   showSearchPanel.value = !showSearchPanel.value
 }
 
-// 解析 Markdown 内容
-const parseMarkdown = async (markdown: string) => {
-  if (!markdown) return ''
-  try {
-    return await marked.parse(markdown)
-  } catch (error) {
-    console.error('Markdown parsing error:', error)
-    return markdown
-  }
-}
 
 // 文件上传处理函数
 const handleFileUpload = () => {
@@ -1341,7 +1579,7 @@ const handleFileUpload = () => {
       // 处理文件上传
       console.log('文件上传:', files)
       // 这里可以添加文件处理逻辑
-      alert(`已选择 ${files.length} 个文件`)
+      alert("已选择 " + files.length + " 个文件")
     }
   }
   
@@ -1354,18 +1592,37 @@ onMounted(() => {
   if (chats.length === 0) {
     startNewChat()
   }
+  
+  // 🎯 初始化文件上传结果检测
+  setTimeout(checkFileUploadResults, 500) // 延迟检查，确保DOM已渲染
+  
+  // 监听DOM变化，自动检测新的文件上传结果
+  fileUploadObserver = new MutationObserver(() => {
+    setTimeout(checkFileUploadResults, 100)
+  })
+  
+  fileUploadObserver.observe(document.body, {
+    childList: true,
+    subtree: true
+  })
 })
 
 onUnmounted(() => {
   // 清理WebSocket连接
-  if (wsManager) {
-    wsManager.disconnect()
-    wsManager = null
+  if (commManager) {
+    commManager.disconnect()
+    commManager = null
   }
   
   // 清理消息处理器
   if (messageHandler) {
     messageHandler = null
+  }
+  
+  // 🎯 清理文件上传检测器
+  if (fileUploadObserver) {
+    fileUploadObserver.disconnect()
+    fileUploadObserver = null
   }
 })
 </script>
@@ -2733,6 +2990,36 @@ onUnmounted(() => {
   font-weight: 400;
 }
 
+/* 🎯 特殊处理：闲聊模式下的文件上传结果 */
+.chat-message-content .message-text:has(a[href*="minio"]),
+.chat-message-content .message-text:has(a[href*="amazonaws"]),
+.chat-message-content .message-text:has(p:contains("成功上传")),
+.chat-message-content .message-text:has(p:contains("文件列表")) {
+  /* 应用final-result的样式 */
+  padding: 24px 28px !important;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: white !important;
+  border-radius: 16px !important;
+  margin: 20px 0 !important;
+  box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.15) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 为文件上传结果添加装饰背景 */
+.chat-message-content .message-text:has(a[href*="minio"])::before,
+.chat-message-content .message-text:has(a[href*="amazonaws"])::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 100px;
+  height: 100px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  transform: translate(30px, -30px);
+}
+
 .chat-message-content .message-text.streaming {
   background: white;
   color: #1e293b;
@@ -3174,14 +3461,29 @@ onUnmounted(() => {
   margin-bottom: 4px;
 }
 
-/* 新增：最终结果样式 */
+/* 新增：最终结果样式 - 优化版本 */
 .final-result {
-  padding: 20px;
+  padding: 24px 28px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  border-radius: 12px;
-  margin-top: 16px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  border-radius: 16px;
+  margin: 20px 0;
+  box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 添加装饰性背景 */
+.final-result::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 100px;
+  height: 100px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  transform: translate(30px, -30px);
 }
 
 .final-result h1,
@@ -3191,29 +3493,33 @@ onUnmounted(() => {
 .final-result h5,
 .final-result h6 {
   color: white;
-  margin: 16px 0 12px 0;
+  margin: 20px 0 16px 0;
   font-weight: 600;
+  position: relative;
+  z-index: 1;
 }
 
 .final-result h2 {
   font-size: 1.5em;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 .final-result h3 {
   font-size: 1.2em;
-  margin: 20px 0 12px 0;
+  margin: 24px 0 16px 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .final-result p {
-  margin: 8px 0;
-  line-height: 1.6;
+  margin: 12px 0;
+  line-height: 1.7;
+  position: relative;
+  z-index: 1;
 }
 
 .final-result strong {
@@ -3224,35 +3530,97 @@ onUnmounted(() => {
 .final-result code {
   background: rgba(255, 255, 255, 0.2);
   color: #f8fafc;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
   font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 0.9em;
 }
 
 .final-result pre {
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: #f8fafc;
-  padding: 16px;
-  border-radius: 8px;
+  padding: 20px;
+  border-radius: 12px;
   overflow-x: auto;
-  margin: 12px 0;
+  margin: 16px 0;
+  position: relative;
+  z-index: 1;
 }
 
+/* 🎯 重点优化：文件列表样式 */
 .final-result ul,
 .final-result ol {
-  margin: 12px 0;
-  padding-left: 20px;
+  margin: 16px 0 20px 0;
+  padding-left: 0; /* 移除默认的左边距 */
+  list-style: none; /* 移除默认的列表样式 */
+  position: relative;
+  z-index: 1;
 }
 
 .final-result li {
-  margin: 6px 0;
-  line-height: 1.5;
+  margin: 12px 0;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  border-left: 4px solid rgba(255, 255, 255, 0.3);
+  line-height: 1.6;
+  position: relative;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+
+.final-result li:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateX(4px);
+  border-left-color: rgba(255, 255, 255, 0.5);
+}
+
+/* 文件列表中的链接样式优化 */
+.final-result li a {
+  color: #e0f2fe;
+  text-decoration: none;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.final-result li a:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+  text-decoration: none;
+}
+
+/* 有效期信息样式 */
+.final-result li:contains("⏰") {
+  border-left-color: #fbbf24;
+}
+
+/* 文件图标优化 */
+.final-result li::before {
+  content: '📁';
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.2);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
 }
 
 .final-result a {
   color: #bfdbfe;
   text-decoration: underline;
+  transition: color 0.3s ease;
 }
 
 .final-result a:hover {
@@ -3613,5 +3981,324 @@ onUnmounted(() => {
 .ascii-container:hover .ascii-diagram {
   border-color: #c7d2fe;
   box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.1);
+}
+
+/* 协议切换器样式 */
+.protocol-switcher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 16px;
+}
+
+.protocol-status {
+  font-size: 14px;
+  color: #64748b;
+}
+
+.protocol-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.protocol-btn {
+  padding: 6px 12px;
+  background: #f9fafb;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  font-size: 12px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.protocol-btn:hover {
+  background: #e2e8f0;
+}
+
+.protocol-btn.active {
+  background: #6366f1;
+  color: white;
+}
+
+/* 协议切换提示样式 */
+.protocol-message {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 8px;
+}
+
+/* 🎯 文件链接的下载样式优化 */
+.final-result .markdown-link,
+.final-result .download-link {
+  color: #e0f2fe;
+  text-decoration: none;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+  margin: 4px 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.final-result .markdown-link:hover,
+.final-result .download-link:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  text-decoration: none;
+}
+
+/* 为下载链接添加图标 */
+.final-result .download-link::after,
+.final-result .markdown-link[href*="minio"]::after,
+.final-result .markdown-link[href*="amazonaws"]::after {
+  content: "⬇️";
+  opacity: 0.8;
+  margin-left: 4px;
+  font-size: 0.9em;
+}
+
+.final-result a {
+  color: #bfdbfe;
+  text-decoration: underline;
+  transition: color 0.3s ease;
+}
+
+.final-result a:hover {
+  color: #dbeafe;
+}
+
+/* 🎯 响应式优化 */
+@media (max-width: 768px) {
+  .final-result {
+    padding: 20px 16px;
+    margin: 16px 0;
+    border-radius: 12px;
+  }
+  
+  .final-result li {
+    padding: 12px 16px;
+    margin: 10px 0;
+    border-radius: 10px;
+  }
+  
+  .final-result li::before {
+    left: -6px;
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+  }
+  
+  .final-result .markdown-link,
+  .final-result .download-link {
+    padding: 6px 10px;
+    font-size: 14px;
+    border-radius: 8px;
+  }
+  
+  .final-result::before {
+    width: 80px;
+    height: 80px;
+    transform: translate(20px, -20px);
+  }
+}
+
+/* 🎯 文件类型图标映射 */
+.final-result li:has(a[href*=".png"])::before,
+.final-result li:has(a[href*=".jpg"])::before,
+.final-result li:has(a[href*=".jpeg"])::before,
+.final-result li:has(a[href*=".gif"])::before {
+  content: '🖼️';
+}
+
+.final-result li:has(a[href*=".pdf"])::before {
+  content: '📄';
+}
+
+.final-result li:has(a[href*=".zip"])::before,
+.final-result li:has(a[href*=".rar"])::before {
+  content: '📦';
+}
+
+.final-result li:has(a[href*=".mp4"])::before,
+.final-result li:has(a[href*=".avi"])::before {
+  content: '🎬';
+}
+
+.final-result li:has(a[href*=".mp3"])::before,
+.final-result li:has(a[href*=".wav"])::before {
+  content: '🎵';
+}
+
+/* 🎯 文件上传结果的特殊样式类 */
+.chat-message-content .message-text.file-upload-result {
+  padding: 28px 32px !important;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: white !important;
+  border-radius: 20px !important;
+  margin: 24px 0 24px 40px !important;
+  box-shadow: 0 12px 28px -8px rgba(102, 126, 234, 0.4), 0 6px 16px -4px rgba(0, 0, 0, 0.15) !important;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 为文件上传结果添加装饰背景 */
+.chat-message-content .message-text.file-upload-result::before {
+  content: '';
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.12) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: floatBackground 8s ease-in-out infinite;
+}
+
+@keyframes floatBackground {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.6; }
+  50% { transform: translate(-10px, -10px) scale(1.1); opacity: 0.8; }
+}
+
+/* 成功标题优化 */
+.chat-message-content .message-text.file-upload-result h1,
+.chat-message-content .message-text.file-upload-result h2,
+.chat-message-content .message-text.file-upload-result p:first-child {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 1.4em;
+  font-weight: 600;
+  margin-bottom: 24px !important;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.chat-message-content .message-text.file-upload-result h1::before,
+.chat-message-content .message-text.file-upload-result h2::before,
+.chat-message-content .message-text.file-upload-result p:first-child::before {
+  content: '✅';
+  font-size: 1.2em;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 8px;
+  border-radius: 50%;
+  animation: successGlow 2s ease-in-out infinite;
+}
+
+@keyframes successGlow {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 rgba(255, 255, 255, 0.4); }
+  50% { transform: scale(1.05); box-shadow: 0 0 12px rgba(255, 255, 255, 0.6); }
+}
+
+/* 文件上传结果中的列表样式 */
+.chat-message-content .message-text.file-upload-result ul,
+.chat-message-content .message-text.file-upload-result ol {
+  margin: 20px 0 24px 0;
+  padding-left: 0;
+  list-style: none;
+  position: relative;
+  z-index: 2;
+}
+
+.chat-message-content .message-text.file-upload-result li {
+  margin: 16px 0;
+  padding: 20px 24px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  border-left: 4px solid rgba(255, 255, 255, 0.4);
+  line-height: 1.7;
+  position: relative;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(15px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.chat-message-content .message-text.file-upload-result li:hover {
+  background: rgba(255, 255, 255, 0.18);
+  transform: translateY(-4px) translateX(8px);
+  border-left-color: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.chat-message-content .message-text.file-upload-result li::before {
+  content: '🖼️';
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.15));
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.chat-message-content .message-text.file-upload-result li:hover::before {
+  transform: translateY(-50%) scale(1.1);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.2));
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.chat-message-content .message-text.file-upload-result a {
+  color: #ffffff !important;
+  text-decoration: none;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin: 8px 0;
+  font-size: 1.02em;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.chat-message-content .message-text.file-upload-result a:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.45);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+  text-decoration: none;
+}
+
+.chat-message-content .message-text.file-upload-result a::after {
+  content: "⬇️";
+  opacity: 0.9;
+  margin-left: auto;
+  font-size: 1.1em;
+  transition: all 0.3s ease;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
+.chat-message-content .message-text.file-upload-result a:hover::after {
+  opacity: 1;
+  transform: translateY(2px);
 }
 </style>

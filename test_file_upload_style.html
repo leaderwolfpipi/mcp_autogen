@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件上传样式测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            padding: 20px;
+            margin: 0;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* 新增：最终结果样式 - 优化版本 */
+        .final-result {
+          padding: 24px 28px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          border-radius: 16px;
+          margin: 20px 0;
+          box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.15);
+          position: relative;
+          overflow: hidden;
+        }
+
+        /* 添加装饰性背景 */
+        .final-result::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          right: 0;
+          width: 100px;
+          height: 100px;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 50%;
+          transform: translate(30px, -30px);
+        }
+
+        .final-result h1,
+        .final-result h2,
+        .final-result h3,
+        .final-result h4,
+        .final-result h5,
+        .final-result h6 {
+          color: white;
+          margin: 20px 0 16px 0;
+          font-weight: 600;
+          position: relative;
+          z-index: 1;
+        }
+
+        .final-result p {
+          margin: 12px 0;
+          line-height: 1.7;
+          position: relative;
+          z-index: 1;
+        }
+
+        /* 🎯 重点优化：文件列表样式 */
+        .final-result ul,
+        .final-result ol {
+          margin: 16px 0 20px 0;
+          padding-left: 0;
+          list-style: none;
+          position: relative;
+          z-index: 1;
+        }
+
+        .final-result li {
+          margin: 12px 0;
+          padding: 16px 20px;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 12px;
+          border-left: 4px solid rgba(255, 255, 255, 0.3);
+          line-height: 1.6;
+          position: relative;
+          transition: all 0.3s ease;
+          backdrop-filter: blur(10px);
+        }
+
+        .final-result li:hover {
+          background: rgba(255, 255, 255, 0.15);
+          transform: translateX(4px);
+          border-left-color: rgba(255, 255, 255, 0.5);
+        }
+
+        /* 文件图标优化 */
+        .final-result li::before {
+          content: '🖼️';
+          position: absolute;
+          left: -8px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: rgba(255, 255, 255, 0.2);
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 16px;
+        }
+
+        .final-result a {
+          color: #e0f2fe;
+          text-decoration: none;
+          font-weight: 500;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          border-radius: 10px;
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          transition: all 0.3s ease;
+          margin: 4px 0;
+          max-width: 100%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .final-result a:hover {
+          color: #ffffff;
+          background: rgba(255, 255, 255, 0.2);
+          border-color: rgba(255, 255, 255, 0.4);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+          text-decoration: none;
+        }
+
+        .final-result a::after {
+          content: "⬇️";
+          opacity: 0.8;
+          margin-left: 4px;
+          font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>文件上传结果样式测试</h1>
+        
+        <div class="final-result">
+            <p>✅ 成功上传 2 个文件</p>
+            
+            <p>📁 文件列表:</p>
+            <ol>
+                <li>
+                    <a href="https://minio.originhub.tech/uploader-test/rotated_image_0_1755425305.png">rotated_image_0_1755425305.png</a>
+                    <br>⏰ 有效期: 1小时0分钟
+                </li>
+                <li>
+                    <a href="https://minio.originhub.tech/uploader-test/rotated_image_1_1755425305.png">rotated_image_1_1755425305.png</a>
+                    <br>⏰ 有效期: 1小时0分钟
+                </li>
+            </ol>
+        </div>
+        
+        <p>这是优化后的文件上传结果显示效果。主要改进包括：</p>
+        <ul>
+            <li>✅ 增加了合适的内边距，不再贴近边界</li>
+            <li>✅ 添加了美观的背景渐变和装饰元素</li>
+            <li>✅ 文件列表项有独立的背景和悬停效果</li>
+            <li>✅ 链接样式更加突出，有下载图标</li>
+            <li>✅ 响应式设计，适配移动端</li>
+        </ul>
+    </div>
+</body>
+</html> 

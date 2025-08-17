@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔧 状态推送修复验证</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .section { background: white; padding: 20px; margin: 10px 0; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .status { padding: 8px 12px; border-radius: 4px; margin: 5px 0; }
+        .connected { background: #e7f5e7; color: #2d5a2d; }
+        .disconnected { background: #ffe7e7; color: #5a2d2d; }
+        .processing { background: #fff3cd; color: #856404; }
+        .ascii-display {
+            background: #f8f9fa; border: 1px solid #dee2e6; padding: 15px; border-radius: 6px; margin: 10px 0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; white-space: pre-wrap; font-size: 14px; line-height: 1.4;
+            min-height: 200px;
+        }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        .log { max-height: 400px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; }
+        .fix-highlight { background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 6px; margin: 15px 0; }
+        .issue-highlight { background: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; border-radius: 6px; margin: 15px 0; }
+        .message-item { padding: 8px 12px; margin: 5px 0; border-radius: 4px; border-left: 4px solid #007bff; }
+        .message-item.tool_start { border-left-color: #ffc107; background: #fff3cd; }
+        .message-item.tool_result { border-left-color: #28a745; background: #d4edda; }
+        .message-item.task_complete { border-left-color: #17a2b8; background: #d1ecf1; }
+        .message-item.error { border-left-color: #dc3545; background: #f8d7da; }
+        .timestamp { color: #6c757d; font-size: 11px; float: right; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 状态推送修复验证</h1>
+        
+        <div class="fix-highlight">
+            <h3>✅ 修复内容</h3>
+            <p><strong>问题:</strong> 状态消息被收集到数组中，只有在MCP处理完成后才统一发送，导致无法实时推送</p>
+            <p><strong>修复:</strong> 改为异步处理MCP请求，同时定期检查并实时推送待处理的状态消息</p>
+            <p><strong>关键改进:</strong> 使用 asyncio.create_task + 轮询机制实现真正的实时状态推送</p>
+        </div>
+        
+        <div class="section">
+            <h3>连接状态</h3>
+            <div id="connectionStatus" class="status disconnected">❌ 未连接</div>
+            <button onclick="connect()">连接WebSocket</button>
+            <button id="testBtn" onclick="test()" disabled>🧪 测试状态推送</button>
+            <button onclick="clearLog()">🗑️ 清空日志</button>
+        </div>
+        
+        <div class="section">
+            <h3>实时状态消息流</h3>
+            <div id="messageFlow" class="log">等待连接...</div>
+        </div>
+        
+        <div class="section">
+            <h3>ASCII执行流程图</h3>
+            <div id="asciiDisplay" class="ascii-display">等待执行...</div>
+        </div>
+        
+        <div class="section">
+            <h3>详细日志</h3>
+            <div id="logDisplay" class="log">等待连接...</div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let messageCount = 0;
+        let startTime = null;
+        
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws/mcp/chat`);
+            
+            ws.onopen = function() {
+                updateStatus('connected', '✅ 已连接');
+                document.getElementById('testBtn').disabled = false;
+                addLog('🔗 WebSocket连接建立');
+            };
+            
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                handleMessage(data);
+            };
+            
+            ws.onclose = function() {
+                updateStatus('disconnected', '❌ 连接断开');
+                document.getElementById('testBtn').disabled = true;
+                addLog('🔌 WebSocket连接断开');
+            };
+            
+            ws.onerror = function(error) {
+                updateStatus('disconnected', '❌ 连接错误');
+                addLog('❌ WebSocket连接错误: ' + error);
+            };
+        }
+        
+        function test() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addLog('❌ WebSocket未连接');
+                return;
+            }
+            
+            startTime = Date.now();
+            messageCount = 0;
+            
+            // 清空显示
+            document.getElementById('messageFlow').innerHTML = '';
+            document.getElementById('asciiDisplay').textContent = '开始执行...';
+            
+            const testQuery = "帮我搜索北京今天的天气情况";
+            
+            addLog('🚀 发送测试请求: ' + testQuery);
+            addLog('⏱️ 开始计时，监控状态推送延迟...');
+            
+            ws.send(JSON.stringify({
+                user_input: testQuery,
+                session_id: null
+            }));
+            
+            updateStatus('processing', '🔄 处理中...');
+        }
+        
+        function handleMessage(data) {
+            messageCount++;
+            const elapsed = startTime ? Date.now() - startTime : 0;
+            
+            // 添加到消息流
+            addMessageToFlow(data, elapsed);
+            
+            // 详细日志
+            addLog(`📨 [${elapsed}ms] 收到消息 #${messageCount}: ${data.type} - ${data.message || ''}`);
+            
+            // 处理不同类型的消息
+            switch(data.type) {
+                case 'mode_detection':
+                    updateAscii(`检测到模式: ${data.mode}`);
+                    addLog(`🎯 模式检测: ${data.mode} (${elapsed}ms)`);
+                    break;
+                    
+                case 'task_planning':
+                    updateAscii('📋 正在制定执行计划...');
+                    break;
+                    
+                case 'task_start':
+                    updateAscii('🚀 任务开始执行');
+                    addLog(`🚀 任务开始 (${elapsed}ms)`);
+                    break;
+                    
+                case 'tool_start':
+                    const toolName = data.tool_name || '未知工具';
+                    const stepId = data.step_id || '未知步骤';
+                    updateAscii(`🔧 工具开始: ${toolName}\n步骤ID: ${stepId}`);
+                    addLog(`🔧 工具开始: ${toolName}, step_id=${stepId} (${elapsed}ms)`);
+                    break;
+                    
+                case 'tool_result':
+                    const resultTool = data.step_data?.tool_name || '未知工具';
+                    const status = data.step_data?.status || data.status || '未知';
+                    const resultStepId = data.step_data?.id || '未知步骤';
+                    updateAscii(`✅ 工具完成: ${resultTool}\n状态: ${status}\n步骤ID: ${resultStepId}`);
+                    addLog(`✅ 工具完成: ${resultTool}, status=${status}, step_id=${resultStepId} (${elapsed}ms)`);
+                    break;
+                    
+                case 'task_complete':
+                    updateAscii('🎯 任务执行完成!');
+                    addLog(`🎯 任务完成 (${elapsed}ms)`);
+                    updateStatus('connected', '✅ 已连接');
+                    
+                    // 显示统计信息
+                    addLog(`📊 总计收到 ${messageCount} 条状态消息，总耗时 ${elapsed}ms`);
+                    if (messageCount > 0) {
+                        addLog(`📊 平均每条消息间隔: ${(elapsed / messageCount).toFixed(1)}ms`);
+                    }
+                    break;
+                    
+                case 'chat_response':
+                    updateAscii('💬 闲聊回复完成');
+                    updateStatus('connected', '✅ 已连接');
+                    break;
+                    
+                case 'error':
+                    updateAscii('❌ 执行出错: ' + data.message);
+                    updateStatus('connected', '✅ 已连接');
+                    addLog(`❌ 错误: ${data.message} (${elapsed}ms)`);
+                    break;
+            }
+        }
+        
+        function addMessageToFlow(data, elapsed) {
+            const flow = document.getElementById('messageFlow');
+            const item = document.createElement('div');
+            item.className = `message-item ${data.type}`;
+            
+            const timestamp = document.createElement('span');
+            timestamp.className = 'timestamp';
+            timestamp.textContent = `+${elapsed}ms`;
+            
+            const content = document.createElement('div');
+            content.innerHTML = `<strong>${data.type}</strong>: ${data.message || JSON.stringify(data).substring(0, 100)}`;
+            content.appendChild(timestamp);
+            
+            item.appendChild(content);
+            flow.appendChild(item);
+            flow.scrollTop = flow.scrollHeight;
+        }
+        
+        function updateAscii(text) {
+            document.getElementById('asciiDisplay').textContent = text;
+        }
+        
+        function updateStatus(type, text) {
+            const status = document.getElementById('connectionStatus');
+            status.className = `status ${type}`;
+            status.textContent = text;
+        }
+        
+        function addLog(message) {
+            const log = document.getElementById('logDisplay');
+            const entry = document.createElement('div');
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('logDisplay').innerHTML = '';
+            document.getElementById('messageFlow').innerHTML = '';
+            document.getElementById('asciiDisplay').textContent = '等待执行...';
+            addLog('🗑️ 日志已清空');
+        }
+        
+        // 自动连接
+        window.onload = function() {
+            addLog('📄 页面加载完成');
+            addLog('🔧 本次测试重点验证状态消息的实时推送');
+            addLog('💡 关键指标: 消息间隔应该很短(100-500ms)，而不是等到最后一次性推送');
+        };
+    </script>
+</body>
+</html> 

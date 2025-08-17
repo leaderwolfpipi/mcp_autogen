@@ -14,50 +14,45 @@ from collections import OrderedDict
 
 from .task_engine import TaskEngine
 from .unified_tool_manager import get_unified_tool_manager
+from .database_manager import get_database_manager
 
 
 class SimpleLRUCache:
     """简单的LRU缓存实现"""
     
-    def __init__(self, maxsize: int = 1000):
+    def __init__(self, maxsize=1000):
         self.maxsize = maxsize
-        self.cache = OrderedDict()
+        self.cache = {}
+        self.access_order = []
+    
+    def __setitem__(self, key, value):
+        if key in self.cache:
+            self.access_order.remove(key)
+        elif len(self.cache) >= self.maxsize:
+            # 移除最久未使用的项
+            oldest = self.access_order.pop(0)
+            del self.cache[oldest]
+        
+        self.cache[key] = value
+        self.access_order.append(key)
     
     def __getitem__(self, key):
         if key not in self.cache:
             raise KeyError(key)
-        # 移动到末尾（最近使用）
-        self.cache.move_to_end(key)
+        
+        # 更新访问顺序
+        self.access_order.remove(key)
+        self.access_order.append(key)
         return self.cache[key]
-    
-    def __setitem__(self, key, value):
-        if key in self.cache:
-            # 更新现有键
-            self.cache.move_to_end(key)
-        elif len(self.cache) >= self.maxsize:
-            # 删除最久未使用的项
-            self.cache.popitem(last=False)
-        self.cache[key] = value
     
     def __contains__(self, key):
         return key in self.cache
-    
-    def __len__(self):
-        return len(self.cache)
     
     def get(self, key, default=None):
         try:
             return self[key]
         except KeyError:
             return default
-    
-    def pop(self, key, default=None):
-        if key in self.cache:
-            return self.cache.pop(key)
-        return default
-    
-    def clear(self):
-        self.cache.clear()
 
 
 class MCPAdapter:
@@ -65,17 +60,25 @@ class MCPAdapter:
     
     def __init__(self, tool_registry=None, max_sessions=1000):
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.sessions = SimpleLRUCache(maxsize=max_sessions)
+        self.tool_registry = tool_registry
+        self.sessions = SimpleLRUCache(maxsize=max_sessions)  # 使用SimpleLRUCache
+        self.status_callback = None  # 添加状态回调支持
         
+        # 创建数据库管理器
+        self.db_manager = get_database_manager()
+        self.logger.info(f"MCP适配器初始化完成，最大会话数: {max_sessions}")
+
         # 获取工具注册表
-        if tool_registry is None:
+        if not self.tool_registry:
             self.tool_registry = get_unified_tool_manager()
-        else:
-            self.tool_registry = tool_registry
-        
-        # MCP版本
-        self.mcp_version = "1.0"
-    
+            
+        self.logger.info(f"MCP适配器初始化完成，最大会话数: {max_sessions}")
+
+    def set_status_callback(self, callback):
+        """设置状态回调函数"""
+        self.status_callback = callback
+        self.logger.info("MCP适配器状态回调已设置")
+
     async def handle_request(self, request: dict) -> dict:
         """
         处理MCP标准请求
@@ -99,26 +102,30 @@ class MCPAdapter:
         context = request.get('context', {})
         
         # 会话管理
-        if session_id not in self.sessions:
-            self.sessions[session_id] = {
+        if session_id not in self.sessions.cache:
+            self.sessions.cache[session_id] = {
                 'context': context,
                 'history': [],
                 'created_at': datetime.now()
             }
         
         # 更新会话上下文
-        self.sessions[session_id]['context'].update(context)
+        self.sessions.cache[session_id]['context'].update(context)
         
         try:
             # 任务处理
             engine = TaskEngine(self.tool_registry, max_depth=5)
+            # 设置状态回调
+            if self.status_callback:
+                engine.set_status_callback(self.status_callback)
+
             result = await engine.execute(
                 user_query,
-                self.sessions[session_id]['context']
+                self.sessions.cache[session_id]['context']
             )
             
             # 更新会话历史
-            self.sessions[session_id]['history'].append({
+            self.sessions.cache[session_id]['history'].append({
                 'timestamp': datetime.now(),
                 'request_id': request_id,
                 'query': user_query,
@@ -156,7 +163,7 @@ class MCPAdapter:
                 return False
         
         # 检查MCP版本
-        if request.get('mcp_version') != self.mcp_version:
+        if request.get('mcp_version') != "1.0": # MCP版本固定为1.0
             self.logger.warning(f"Unsupported MCP version: {request.get('mcp_version')}")
             return False
         
@@ -194,7 +201,7 @@ class MCPAdapter:
         
         # 构造响应
         response = {
-            "mcp_version": self.mcp_version,
+            "mcp_version": "1.0",
             "session_id": session_id,
             "request_id": request_id,
             "status": status,
@@ -241,7 +248,7 @@ class MCPAdapter:
     def _error_response(self, message: str, code: int, session_id: str = None, request_id: str = None) -> dict:
         """生成错误响应"""
         return {
-            "mcp_version": self.mcp_version,
+            "mcp_version": "1.0",
             "session_id": session_id or str(uuid.uuid4()),
             "request_id": request_id or str(uuid.uuid4()),
             "status": "error",
@@ -264,23 +271,23 @@ class MCPAdapter:
     
     def get_session_info(self, session_id: str) -> Optional[dict]:
         """获取会话信息"""
-        return self.sessions.get(session_id)
+        return self.sessions.cache.get(session_id)
     
     def clear_session(self, session_id: str) -> bool:
         """清除会话"""
-        if session_id in self.sessions:
-            del self.sessions[session_id]
+        if session_id in self.sessions.cache:
+            del self.sessions.cache[session_id]
             return True
         return False
     
     def get_sessions_count(self) -> int:
         """获取活跃会话数量"""
-        return len(self.sessions)
+        return len(self.sessions.cache)
     
     def get_mcp_info(self) -> dict:
         """获取MCP适配器信息"""
         return {
-            "mcp_version": self.mcp_version,
+            "mcp_version": "1.0",
             "adapter_version": "1.0.0",
             "supported_features": [
                 "standard_requests",
@@ -289,6 +296,11 @@ class MCPAdapter:
                 "error_handling",
                 "tool_execution"
             ],
-            "active_sessions": len(self.sessions),
+            "active_sessions": len(self.sessions.cache),
             "max_sessions": self.sessions.maxsize
         } 
+
+    def set_status_callback(self, callback):
+        """设置状态回调函数"""
+        self.status_callback = callback
+        self.logger.info("MCP适配器状态回调已设置") 

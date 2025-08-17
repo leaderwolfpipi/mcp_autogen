@@ -54,7 +54,7 @@ export class MessageHandler {
   }
 
   // 处理闲聊模式
-  setChatMode(chatResponse: string, executionTime?: number) {
+  setChatMode(chatResponse: string) {
     this.state.isChatMode = true
     this.state.isTaskMode = false
     this.state.isLoading = false
@@ -93,7 +93,7 @@ export class MessageHandler {
   }
 
   // 任务完成
-  taskComplete(message: string, executionTime?: number) {
+  taskComplete(message: string) {
     if (!this.state.isTaskMode) return
     
     this.state.content += '\n\n' + this.parseMarkdown(message)
@@ -189,7 +189,7 @@ export class MessageHandler {
   }
 
   // 任务成功完成（兼容旧版本）
-  taskSuccess(message: string, data?: any) {
+  taskSuccess(data?: any) {
     if (data) {
       // 检查是否是闲聊回答
       const finalOutput = data.final_output || data.data?.final_output
@@ -226,7 +226,7 @@ export class MessageHandler {
   }
 
   // 连接断开
-  connectionDisconnect(code: number, reason: string) {
+  connectionDisconnect(code: number) {
     if (code === 1000) {
       this.addProgress('✅ 连接正常关闭')
     } else {

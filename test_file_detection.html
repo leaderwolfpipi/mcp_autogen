@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件上传检测测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            padding: 20px;
+            margin: 0;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 模拟聊天消息容器 */
+        .chat-message-content {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+        }
+
+        .message-text {
+            background: white;
+            color: #1e293b;
+            padding: 16px;
+            border-radius: 4px 18px 18px 18px;
+            white-space: pre-wrap;
+            line-height: 1.6;
+            min-height: 20px;
+            word-wrap: break-word;
+            display: inline-block;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            width: 100%;
+            font-size: 14px;
+            border-right: none;
+            max-width: none;
+            font-weight: 400;
+        }
+
+        /* 🎯 文件上传结果的特殊样式类 */
+        .message-text.file-upload-result {
+            padding: 24px 28px !important;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+            color: white !important;
+            border-radius: 16px !important;
+            margin: 20px 0 !important;
+            box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.15) !important;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .message-text.file-upload-result::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 100px;
+            height: 100px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            transform: translate(30px, -30px);
+        }
+
+        .message-text.file-upload-result ul,
+        .message-text.file-upload-result ol {
+            margin: 16px 0 20px 0;
+            padding-left: 0;
+            list-style: none;
+            position: relative;
+            z-index: 1;
+        }
+
+        .message-text.file-upload-result li {
+            margin: 12px 0;
+            padding: 16px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            border-left: 4px solid rgba(255, 255, 255, 0.3);
+            line-height: 1.6;
+            position: relative;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .message-text.file-upload-result li:hover {
+            background: rgba(255, 255, 255, 0.15);
+            transform: translateX(4px);
+            border-left-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .message-text.file-upload-result li::before {
+            content: '🖼️';
+            position: absolute;
+            left: -8px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.2);
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .message-text.file-upload-result a {
+            color: #e0f2fe !important;
+            text-decoration: none;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+            margin: 4px 0;
+        }
+
+        .message-text.file-upload-result a:hover {
+            color: #ffffff !important;
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            text-decoration: none;
+        }
+
+        .message-text.file-upload-result a::after {
+            content: "⬇️";
+            opacity: 0.8;
+            margin-left: 4px;
+            font-size: 0.9em;
+        }
+
+        .test-button {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 10px;
+        }
+
+        .test-button:hover {
+            background: #4338ca;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+
+        .status.success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status.error {
+            background: #fef2f2;
+            color: #dc2626;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 文件上传检测测试</h1>
+        
+        <div class="status" id="status">等待测试...</div>
+        
+        <button class="test-button" onclick="runDetectionTest()">🔍 运行检测测试</button>
+        <button class="test-button" onclick="addFileUploadMessage()">➕ 添加文件上传消息</button>
+        <button class="test-button" onclick="clearMessages()">🗑️ 清空消息</button>
+
+        <div id="messages-container">
+            <!-- 测试消息将在这里添加 -->
+        </div>
+
+        <h2>📝 测试说明</h2>
+        <ul>
+            <li>点击"添加文件上传消息"会插入一个包含文件上传结果的消息</li>
+            <li>点击"运行检测测试"会检测现有消息并应用样式</li>
+            <li>如果检测成功，消息应该变成紫色渐变背景</li>
+        </ul>
+    </div>
+
+    <script>
+        // 文件上传结果检测逻辑（从Vue组件复制）
+        const checkFileUploadResults = () => {
+            console.log('🔍 开始检测文件上传结果...')
+            const messageTexts = document.querySelectorAll('.chat-message-content .message-text')
+            let detectedCount = 0
+            
+            messageTexts.forEach(element => {
+                const content = element.textContent || element.innerHTML
+                
+                // 检测是否包含文件上传相关内容
+                if (
+                    content.includes('成功上传') || 
+                    content.includes('文件列表') ||
+                    element.querySelector('a[href*="minio"]') ||
+                    element.querySelector('a[href*="amazonaws"]') ||
+                    content.includes('rotated_image_') ||
+                    content.includes('有效期:')
+                ) {
+                    if (!element.classList.contains('file-upload-result')) {
+                        element.classList.add('file-upload-result')
+                        detectedCount++
+                        console.log('🎯 检测到文件上传结果，应用特殊样式')
+                    }
+                }
+            })
+            
+            return detectedCount
+        }
+
+        function runDetectionTest() {
+            const detectedCount = checkFileUploadResults()
+            const statusEl = document.getElementById('status')
+            
+            if (detectedCount > 0) {
+                statusEl.textContent = `✅ 检测成功！找到 ${detectedCount} 个文件上传结果`
+                statusEl.className = 'status success'
+            } else {
+                statusEl.textContent = '❌ 未检测到文件上传结果，请先添加测试消息'
+                statusEl.className = 'status error'
+            }
+        }
+
+        function addFileUploadMessage() {
+            const container = document.getElementById('messages-container')
+            const messageHtml = `
+                <div class="chat-message-content">
+                    <div class="message-text">
+                        <p>✅ 成功上传 2 个文件</p>
+                        <p>📁 文件列表:</p>
+                        <ol>
+                            <li>
+                                🖼️ <a href="https://minio.originhub.tech/uploader-test/rotated_image_0_1755425305.png">rotated_image_0_1755425305.png</a>
+                                <br>⏰ 有效期: 1小时0分钟
+                            </li>
+                            <li>
+                                🖼️ <a href="https://minio.originhub.tech/uploader-test/rotated_image_1_1755425305.png">rotated_image_1_1755425305.png</a>
+                                <br>⏰ 有效期: 1小时0分钟
+                            </li>
+                        </ol>
+                    </div>
+                </div>
+            `
+            container.innerHTML += messageHtml
+            
+            const statusEl = document.getElementById('status')
+            statusEl.textContent = '📝 已添加文件上传消息，请点击"运行检测测试"'
+            statusEl.className = 'status'
+        }
+
+        function clearMessages() {
+            document.getElementById('messages-container').innerHTML = ''
+            const statusEl = document.getElementById('status')
+            statusEl.textContent = '🗑️ 已清空所有消息'
+            statusEl.className = 'status'
+        }
+
+        // 页面加载完成后自动添加一个测试消息
+        window.addEventListener('load', () => {
+            addFileUploadMessage()
+            setTimeout(() => {
+                runDetectionTest()
+            }, 100)
+        })
+    </script>
+</body>
+</html> 

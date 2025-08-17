@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔍 实时状态更新测试</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .section { background: white; padding: 20px; margin: 10px 0; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .status { padding: 8px 12px; border-radius: 4px; margin: 5px 0; }
+        .connected { background: #e7f5e7; color: #2d5a2d; }
+        .disconnected { background: #ffe7e7; color: #5a2d2d; }
+        .ascii-display {
+            background: #f8f9fa; border: 1px solid #dee2e6; padding: 15px; border-radius: 6px; margin: 10px 0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; white-space: pre-wrap; font-size: 14px; line-height: 1.4;
+            min-height: 200px;
+        }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        .log { max-height: 300px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; }
+        .timeline { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 6px; margin: 15px 0; }
+        .step { padding: 8px 12px; margin: 5px 0; border-radius: 4px; }
+        .step.pending { background: #e2e3e5; color: #6c757d; }
+        .step.running { background: #d1ecf1; color: #0c5460; }
+        .step.success { background: #d4edda; color: #155724; }
+        .step.error { background: #f8d7da; color: #721c24; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .problem { background: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; border-radius: 6px; margin: 15px 0; }
+        .fix { background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 6px; margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 实时状态更新测试</h1>
+        
+        <div class="problem">
+            <h3>🚨 发现的问题</h3>
+            <p><strong>问题1:</strong> 后端tool_start消息缺少step_id字段</p>
+            <p><strong>问题2:</strong> 工具执行是瞬间完成，没有真正的分步执行</p>
+            <p><strong>问题3:</strong> 前端无法正确匹配step_id来更新状态</p>
+        </div>
+        
+        <div class="fix">
+            <h3>✅ 修复内容</h3>
+            <p>1. 添加step_id字段到tool_start消息</p>
+            <p>2. 添加延迟模拟真实执行过程 (0.5s启动 + 1.0s执行)</p>
+            <p>3. 确保tool_result使用相同的step_id</p>
+        </div>
+        
+        <div class="section">
+            <h3>连接状态</h3>
+            <div id="connectionStatus" class="status disconnected">❌ 未连接</div>
+            <button onclick="connect()">连接WebSocket</button>
+            <button id="testBtn" onclick="test()" disabled>发送测试</button>
+            <button onclick="clear()">清除</button>
+        </div>
+        
+        <div class="grid">
+            <div class="section">
+                <h3>📊 执行流程图 (实时更新)</h3>
+                <div id="display" class="ascii-display">等待连接...</div>
+            </div>
+            
+            <div class="section">
+                <h3>📈 执行时间线</h3>
+                <div id="timeline" class="timeline">
+                    <div id="step1" class="step pending">1. 模式检测 - 等待开始</div>
+                    <div id="step2" class="step pending">2. 任务规划 - 等待开始</div>
+                    <div id="step3" class="step pending">3. 工具启动 - 等待开始</div>
+                    <div id="step4" class="step pending">4. 工具执行 - 等待开始</div>
+                    <div id="step5" class="step pending">5. 任务完成 - 等待开始</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h3>📋 详细日志 (验证消息格式)</h3>
+            <div id="log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let connected = false;
+        let startTime = null;
+        
+        function connect() {
+            ws = new WebSocket('ws://localhost:8000/ws/mcp/chat');
+            
+            ws.onopen = () => {
+                connected = true;
+                document.getElementById('connectionStatus').textContent = '✅ 已连接';
+                document.getElementById('connectionStatus').className = 'status connected';
+                document.getElementById('testBtn').disabled = false;
+                log('✅ WebSocket连接成功');
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleMessage(data);
+                } catch (e) {
+                    log(`❌ 消息解析失败: ${e.message}`);
+                }
+            };
+            
+            ws.onclose = () => {
+                connected = false;
+                document.getElementById('connectionStatus').textContent = '❌ 连接断开';
+                document.getElementById('connectionStatus').className = 'status disconnected';
+                document.getElementById('testBtn').disabled = true;
+                log('❌ WebSocket连接断开');
+            };
+            
+            ws.onerror = (error) => log(`❌ WebSocket错误: ${error}`);
+        }
+        
+        function test() {
+            if (!ws || !connected) return;
+            
+            startTime = Date.now();
+            resetTimeline();
+            
+            const msg = {
+                user_input: "帮我搜索最新的AI技术发展",
+                session_id: `test_${Date.now()}`
+            };
+            
+            ws.send(JSON.stringify(msg));
+            log('📤 发送测试消息: ' + msg.user_input);
+            log('⏱️ 开始计时，观察实时状态更新...');
+        }
+        
+        function handleMessage(data) {
+            const elapsed = startTime ? ((Date.now() - startTime) / 1000).toFixed(1) : '0.0';
+            log(`📨 [+${elapsed}s] ${data.type}: ${data.message || ''}`);
+            
+            // 详细记录消息内容用于调试
+            if (data.type === 'tool_start') {
+                log(`🔍 tool_start详情: tool_name=${data.tool_name}, step_id=${data.step_id || '❌缺失'}, step_index=${data.step_index}`);
+                if (!data.step_id) {
+                    log('⚠️ 警告：tool_start消息缺少step_id字段！');
+                }
+            }
+            
+            if (data.type === 'tool_result') {
+                log(`🔍 tool_result详情: step_data.id=${data.step_data?.id || '❌缺失'}, tool_name=${data.step_data?.tool_name}`);
+            }
+            
+            // 更新执行流程图
+            if (data.ascii_diagram) {
+                document.getElementById('display').textContent = data.ascii_diagram;
+                log(`📊 [+${elapsed}s] 更新ASCII图表`);
+            }
+            
+            // 更新时间线
+            updateTimeline(data.type, elapsed);
+        }
+        
+        function updateTimeline(type, elapsed) {
+            switch(type) {
+                case 'mode_detection':
+                    setStepStatus('step1', 'running', `1. 模式检测 - 执行中 (+${elapsed}s)`);
+                    break;
+                case 'task_planning':
+                    setStepStatus('step1', 'success', `1. 模式检测 - 完成 (+${elapsed}s)`);
+                    setStepStatus('step2', 'running', `2. 任务规划 - 执行中 (+${elapsed}s)`);
+                    break;
+                case 'task_start':
+                    setStepStatus('step2', 'success', `2. 任务规划 - 完成 (+${elapsed}s)`);
+                    break;
+                case 'tool_start':
+                    setStepStatus('step3', 'running', `3. 工具启动 - 执行中 (+${elapsed}s)`);
+                    setTimeout(() => {
+                        setStepStatus('step3', 'success', `3. 工具启动 - 完成 (+${elapsed}s)`);
+                        setStepStatus('step4', 'running', `4. 工具执行 - 执行中...`);
+                    }, 500);
+                    break;
+                case 'tool_result':
+                    setStepStatus('step4', 'success', `4. 工具执行 - 完成 (+${elapsed}s)`);
+                    break;
+                case 'task_complete':
+                    setStepStatus('step5', 'success', `5. 任务完成 - 完成 (+${elapsed}s)`);
+                    log(`🎉 总执行时间: ${elapsed}秒`);
+                    break;
+            }
+        }
+        
+        function setStepStatus(stepId, status, text) {
+            const step = document.getElementById(stepId);
+            if (step) {
+                step.className = `step ${status}`;
+                step.textContent = text;
+            }
+        }
+        
+        function resetTimeline() {
+            const steps = ['step1', 'step2', 'step3', 'step4', 'step5'];
+            const texts = [
+                '1. 模式检测 - 等待开始',
+                '2. 任务规划 - 等待开始', 
+                '3. 工具启动 - 等待开始',
+                '4. 工具执行 - 等待开始',
+                '5. 任务完成 - 等待开始'
+            ];
+            
+            steps.forEach((stepId, index) => {
+                setStepStatus(stepId, 'pending', texts[index]);
+            });
+        }
+        
+        function log(message) {
+            const logEl = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logEl.textContent += `[${time}] ${message}\n`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+        
+        function clear() {
+            document.getElementById('log').textContent = '';
+            document.getElementById('display').textContent = '等待连接...';
+            resetTimeline();
+        }
+        
+        window.onload = () => {
+            log('🔍 实时状态更新测试页面加载完成');
+            log('修复内容：');
+            log('1. 添加step_id字段到tool_start消息 ✅');
+            log('2. 添加执行延迟模拟真实过程 ✅');
+            log('3. 确保step_id在tool_start和tool_result中一致 ✅');
+        };
+    </script>
+</body>
+</html> 

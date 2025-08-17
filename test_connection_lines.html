@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔧 连接线修复验证</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .section { background: white; padding: 20px; margin: 10px 0; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .status { padding: 8px 12px; border-radius: 4px; margin: 5px 0; }
+        .connected { background: #e7f5e7; color: #2d5a2d; }
+        .disconnected { background: #ffe7e7; color: #5a2d2d; }
+        .ascii-display {
+            background: #f8f9fa; border: 1px solid #dee2e6; padding: 15px; border-radius: 6px; margin: 10px 0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; white-space: pre-wrap; font-size: 14px; line-height: 1.4;
+        }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        .log { max-height: 300px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; }
+        .highlight { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 6px; margin: 15px 0; }
+        .issue { background: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; border-radius: 6px; margin: 15px 0; }
+        .fix { background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 6px; margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 连接线修复验证</h1>
+        
+        <div class="issue">
+            <h3>❌ 发现的问题</h3>
+            <p><strong>问题1:</strong> onToolStart中硬编码图表覆盖动态图表 ✅ 已修复</p>
+            <p><strong>问题2:</strong> generateDefaultTaskDiagram生成硬编码实线图表 ✅ 已修复</p>
+            <p><strong>问题3:</strong> 任务初始化时使用硬编码图表而非动态图表 ✅ 已修复</p>
+        </div>
+        
+        <div class="fix">
+            <h3>✅ 修复方案</h3>
+            <p>1. 注释掉onToolStart中的硬编码图表更新</p>
+            <p>2. 修改generateDefaultTaskDiagram使用虚线</p>
+            <p>3. 任务初始化时先创建执行计划，再生成动态图表</p>
+            <p>4. onTaskStart中也使用动态图表而非硬编码图表</p>
+        </div>
+        
+        <div class="section">
+            <h3>连接状态</h3>
+            <div id="connectionStatus" class="status disconnected">❌ 未连接</div>
+            <button onclick="connect()">连接WebSocket</button>
+            <button id="testBtn" onclick="test()" disabled>发送测试</button>
+            <button onclick="clear()">清除</button>
+        </div>
+        
+        <div class="section">
+            <h3>📊 实时执行流程图 (验证连接线)</h3>
+            <div id="display" class="ascii-display">等待连接...</div>
+            <div id="analysis" style="margin-top: 10px; padding: 10px; background: #e9ecef; border-radius: 4px;"></div>
+        </div>
+        
+        <div class="section">
+            <h3>📋 详细日志</h3>
+            <div id="log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let connected = false;
+        
+        function connect() {
+            ws = new WebSocket('ws://localhost:8000/ws/mcp/chat');
+            
+            ws.onopen = () => {
+                connected = true;
+                document.getElementById('connectionStatus').textContent = '✅ 已连接';
+                document.getElementById('connectionStatus').className = 'status connected';
+                document.getElementById('testBtn').disabled = false;
+                log('WebSocket连接成功');
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleMessage(data);
+                } catch (e) {
+                    log(`❌ 消息解析失败: ${e.message}`);
+                }
+            };
+            
+            ws.onclose = () => {
+                connected = false;
+                document.getElementById('connectionStatus').textContent = '❌ 连接断开';
+                document.getElementById('connectionStatus').className = 'status disconnected';
+                document.getElementById('testBtn').disabled = true;
+                log('WebSocket连接断开');
+            };
+            
+            ws.onerror = (error) => log(`❌ WebSocket错误: ${error}`);
+        }
+        
+        function test() {
+            if (!ws || !connected) return;
+            
+            const msg = {
+                user_input: "帮我搜索最新的AI发展趋势",
+                session_id: `test_${Date.now()}`
+            };
+            
+            ws.send(JSON.stringify(msg));
+            log('📤 发送测试消息: ' + msg.user_input);
+        }
+        
+        function handleMessage(data) {
+            log(`📨 收到: ${data.type} - ${data.message || ''}`);
+            
+            if (data.ascii_diagram) {
+                const diagram = data.ascii_diagram;
+                document.getElementById('display').textContent = diagram;
+                
+                // 分析连接线
+                analyzeConnectionLines(diagram);
+                log('📊 更新ASCII图表');
+            }
+        }
+        
+        function analyzeConnectionLines(diagram) {
+            const lines = diagram.split('\n');
+            let solidLines = 0;
+            let dashedLines = 0;
+            let analysis = '';
+            
+            lines.forEach((line, index) => {
+                if (line.includes('│')) {
+                    solidLines++;
+                    analysis += `第${index+1}行: 实线 │ (表示步骤已完成)\n`;
+                }
+                if (line.includes('┇')) {
+                    dashedLines++;
+                    analysis += `第${index+1}行: 虚线 ┇ (表示步骤未完成/正在执行)\n`;
+                }
+            });
+            
+            let result = `连接线分析:\n`;
+            result += `实线数量: ${solidLines} (已完成步骤)\n`;
+            result += `虚线数量: ${dashedLines} (未完成步骤)\n\n`;
+            result += analysis;
+            
+            // 判断是否修复成功
+            if (dashedLines > 0) {
+                result += '\n✅ 修复成功！连接线正确显示步骤状态';
+            } else if (solidLines > 0) {
+                result += '\n⚠️ 可能仍有问题：所有连接线都是实线';
+            }
+            
+            document.getElementById('analysis').textContent = result;
+        }
+        
+        function log(message) {
+            const logEl = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logEl.textContent += `[${time}] ${message}\n`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+        
+        function clear() {
+            document.getElementById('log').textContent = '';
+            document.getElementById('display').textContent = '等待连接...';
+            document.getElementById('analysis').textContent = '';
+        }
+        
+        window.onload = () => {
+            log('连接线修复验证页面加载完成');
+            log('已修复的问题：');
+            log('1. onToolStart硬编码图表覆盖 ✅');
+            log('2. generateDefaultTaskDiagram硬编码实线 ✅');
+            log('3. 任务初始化使用硬编码图表 ✅');
+            log('4. onTaskStart使用硬编码图表 ✅');
+        };
+    </script>
+</body>
+</html> 

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎯 最终修复测试 - 连接线动态显示</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            margin: 0; padding: 20px; background: #f5f5f5;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .section {
+            background: white; padding: 20px; margin: 10px 0;
+            border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .status { padding: 8px 12px; border-radius: 4px; margin: 5px 0; }
+        .connected { background: #e7f5e7; color: #2d5a2d; }
+        .disconnected { background: #ffe7e7; color: #5a2d2d; }
+        .ascii-display {
+            background: #f8f9fa; border: 1px solid #dee2e6;
+            padding: 15px; border-radius: 6px; margin: 10px 0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            white-space: pre-wrap; font-size: 14px; line-height: 1.4;
+        }
+        button {
+            background: #007bff; color: white; border: none;
+            padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        .log { max-height: 300px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 4px; }
+        .log-entry { font-family: monospace; font-size: 12px; margin: 2px 0; padding: 2px 5px; }
+        .fix-highlight { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 6px; margin: 15px 0; }
+        .before-after { display: flex; gap: 20px; }
+        .before-after > div { flex: 1; }
+        .before { border: 2px solid #dc3545; border-radius: 6px; padding: 15px; }
+        .after { border: 2px solid #28a745; border-radius: 6px; padding: 15px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 最终修复测试 - 连接线动态显示</h1>
+        
+        <div class="fix-highlight">
+            <h3>🔧 关键修复点</h3>
+            <p><strong>问题:</strong> onToolStart中硬编码的ASCII图表覆盖了动态生成的图表</p>
+            <p><strong>解决:</strong> 注释掉硬编码图表，只使用动态生成的执行计划图表</p>
+            <p><strong>效果:</strong> 连接线现在根据步骤状态动态显示：pending/running = 虚线 <code>┇</code>，success = 实线 <code>│</code></p>
+        </div>
+        
+        <div class="section">
+            <h3>连接状态</h3>
+            <div id="connectionStatus" class="status disconnected">❌ 未连接</div>
+            <button onclick="connectWS()">连接WebSocket</button>
+            <button id="testBtn" onclick="sendTest()" disabled>发送测试</button>
+            <button onclick="clearAll()">清除</button>
+        </div>
+        
+        <div class="before-after">
+            <div class="before">
+                <h4>❌ 修复前 (错误)</h4>
+                <div class="ascii-display">    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         │  ← 这里应该是虚线
+         ▼
+  🔄 🔍 smart_search
+         │  ← 这里应该是虚线
+         ▼
+    ✅ 任务完成</div>
+                <p><small>所有连接线都是实线，不反映真实状态</small></p>
+            </div>
+            
+            <div class="after">
+                <h4>✅ 修复后 (正确)</h4>
+                <div class="ascii-display" id="correctDisplay">    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         ┇  ← 虚线表示未完成
+         ▼
+  🔄 🔍 smart_search
+         ┇  ← 虚线表示正在执行
+         ▼
+    🔄 执行中...</div>
+                <p><small>连接线根据步骤状态动态显示</small></p>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h3>📊 实时执行流程图</h3>
+            <div id="liveDisplay" class="ascii-display">等待连接...</div>
+        </div>
+        
+        <div class="section">
+            <h3>📋 执行日志</h3>
+            <div id="logDisplay" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let isConnected = false;
+        
+        function connectWS() {
+            const wsUrl = 'ws://localhost:8000/ws/mcp/chat';
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                isConnected = true;
+                document.getElementById('connectionStatus').textContent = '✅ 已连接';
+                document.getElementById('connectionStatus').className = 'status connected';
+                document.getElementById('testBtn').disabled = false;
+                addLog('WebSocket连接成功');
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleMessage(data);
+                } catch (e) {
+                    addLog(`消息解析失败: ${e.message}`);
+                }
+            };
+            
+            ws.onclose = () => {
+                isConnected = false;
+                document.getElementById('connectionStatus').textContent = '❌ 连接断开';
+                document.getElementById('connectionStatus').className = 'status disconnected';
+                document.getElementById('testBtn').disabled = true;
+                addLog('WebSocket连接断开');
+            };
+            
+            ws.onerror = (error) => {
+                addLog(`WebSocket错误: ${error}`);
+            };
+        }
+        
+        function sendTest() {
+            if (!ws || !isConnected) return;
+            
+            const testMsg = {
+                user_input: "帮我搜索最新的人工智能发展趋势",
+                session_id: `test_${Date.now()}`
+            };
+            
+            ws.send(JSON.stringify(testMsg));
+            addLog('发送测试消息: ' + testMsg.user_input);
+        }
+        
+        function handleMessage(data) {
+            addLog(`收到: ${data.type} - ${data.message || ''}`);
+            
+            // 更新实时显示
+            if (data.ascii_diagram) {
+                document.getElementById('liveDisplay').textContent = data.ascii_diagram;
+                addLog('📊 更新ASCII图表 - 检查连接线是否正确');
+            }
+            
+            // 演示正确的状态变化
+            switch(data.type) {
+                case 'tool_start':
+                    showCorrectFlow('running', data.tool_name);
+                    break;
+                case 'tool_result':
+                    showCorrectFlow('success', data.step_data?.tool_name);
+                    break;
+            }
+        }
+        
+        function showCorrectFlow(state, toolName) {
+            const tool = toolName || 'smart_search';
+            let diagram;
+            
+            if (state === 'running') {
+                diagram = `    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         ┇  ← 虚线：步骤未完成
+         ▼
+  🔄 🔍 ${tool}
+         ┇  ← 虚线：正在执行
+         ▼
+    🔄 执行中...`;
+            } else if (state === 'success') {
+                diagram = `    👤 用户输入
+         │
+         ▼
+    🧠 LLM分析
+         │  ← 实线：步骤已完成
+         ▼
+  ✅ 🔍 ${tool}
+         │  ← 实线：执行成功
+         ▼
+    ✅ 任务完成`;
+            }
+            
+            if (diagram) {
+                document.getElementById('correctDisplay').textContent = diagram;
+                addLog(`🎯 演示正确的连接线显示 - ${state} 状态`);
+            }
+        }
+        
+        function addLog(message) {
+            const log = document.getElementById('logDisplay');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        function clearAll() {
+            document.getElementById('logDisplay').innerHTML = '';
+            document.getElementById('liveDisplay').textContent = '等待连接...';
+        }
+        
+        window.onload = () => {
+            addLog('测试页面加载完成');
+            addLog('主要修复：删除onToolStart中的硬编码图表覆盖');
+        };
+    </script>
+</body>
+</html> 

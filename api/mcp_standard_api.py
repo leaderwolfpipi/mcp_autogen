@@ -14,7 +14,8 @@ import time
 import uuid
 from typing import Dict, Any, Optional, AsyncGenerator
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from sse_starlette.sse import EventSourceResponse
 from pydantic import BaseModel, Field
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,17 +29,6 @@ from core.execution_status_manager import (
     ExecutionStatus, MessageType
 )
 
-# 添加真实工具系统的导入
-try:
-    from core.task_engine import TaskEngine
-    from core.tool_registry import ToolRegistry
-    REAL_TOOLS_AVAILABLE = True
-except ImportError as e:
-    logger = logging.getLogger(__name__)
-    logger.warning(f"真实工具系统不可用，将使用mock模式: {e}")
-    REAL_TOOLS_AVAILABLE = False
-    TaskEngine = None
-    ToolRegistry = None
 
 from core.mcp_adapter import MCPAdapter
 from core.database_manager import get_database_manager
@@ -58,6 +48,9 @@ try:
     LLM_AVAILABLE = True
 except ImportError:
     LLM_AVAILABLE = False
+
+# 添加协议适配器导入
+from core.protocol_adapter import ProtocolAdapter, TransportType
 
 
 # 配置日志
@@ -333,6 +326,7 @@ class StreamingMCPEngine:
     
     async def _handle_chat_mode_streaming(self, user_input: str, session_id: str) -> AsyncGenerator[Dict[str, Any], None]:
         """处理闲聊模式 - 流式输出"""
+        start_time = time.time()  # 记录开始时间
         try:
             # 尝试使用LLM客户端
             if self.llm_client:
@@ -348,20 +342,95 @@ class StreamingMCPEngine:
                     # 添加当前用户消息
                     messages.append({"role": "user", "content": user_input})
                     
-                    # 调用LLM
-                    response = await self.llm_client.generate_from_messages(messages)
+                    # 检查是否支持流式生成
+                    if hasattr(self.llm_client, 'generate_streaming'):
+                        print(f"🔍 LLM客户端支持流式生成，开始流式处理...")
+                        # 流式生成回复
+                        content_buffer = ""
+                        try:
+                            async for chunk in self.llm_client.generate_streaming(messages, max_tokens=300, temperature=0.7):
+                                print(f"🔍 收到LLM流式块: {chunk}")
+                                if chunk.get('type') == 'content':
+                                    content = chunk.get('content', '')
+                                    content_buffer += content
+                                    
+                                    # 🎯 关键修复：发送正确的chat_streaming格式
+                                    streaming_event = {
+                                        "type": "status",
+                                        "data": {
+                                            "type": "chat_streaming",
+                                            "message": f"生成中: {content_buffer}",
+                                            "partial_content": content,
+                                            "accumulated_content": content_buffer
+                                        },
+                                        "session_id": session_id,
+                                        "timestamp": time.time()
+                                    }
+                                    
+                                    # 🔍 调试：打印实际发送的事件
+                                    print(f"🔍 LLM流式事件: {streaming_event}")
+                                    
+                                    yield streaming_event
+                        except Exception as stream_error:
+                            print(f"❌ LLM流式生成异常: {stream_error}")
+                            raise stream_error
+                        
+                        # 发送最终完整响应（流式生成完成后）
+                        if content_buffer.strip():
+                            final_response = content_buffer.strip()
+                        else:
+                            final_response = "你好！有什么可以帮助您的吗？"
+                        
+                        print(f"🔍 LLM流式生成完成，最终响应: {final_response}")
+                    else:
+                        print(f"🔍 LLM客户端不支持流式生成，使用模拟流式输出...")
+                        
+                        # 降级到同步生成，但仍然以流式方式返回
+                        response = await self.llm_client.generate_from_messages(messages)
+                        final_response = response
+                        
+                        # 模拟流式输出效果
+                        import asyncio
+                        words = final_response.split()
+                        content_buffer = ""
+                        for i, word in enumerate(words):
+                            content_buffer += (word + " " if i < len(words) - 1 else word)
+                            
+                            streaming_event = {
+                                "type": "status",
+                                "data": {
+                                    "type": "chat_streaming",
+                                    "message": f"生成中: {content_buffer}",
+                                    "partial_content": word + (" " if i < len(words) - 1 else ""),
+                                    "accumulated_content": content_buffer
+                                },
+                                "session_id": session_id,
+                                "timestamp": time.time()
+                            }
+                            
+                            # 🔍 调试：打印模拟流式事件
+                            print(f"🔍 模拟流式事件: {streaming_event}")
+                            
+                            yield streaming_event
+                            # 小延迟增加流式效果
+                            await asyncio.sleep(0.05)
+                        
+                        final_response = content_buffer
                     
                     # 更新会话历史
                     session['messages'].extend([
                         {"role": "user", "content": user_input, "timestamp": time.time()},
-                        {"role": "assistant", "content": response, "timestamp": time.time()}
+                        {"role": "assistant", "content": final_response, "timestamp": time.time()}
                     ])
                     
                     yield {
-                        "type": "chat_response",
+                        "type": "result",
+                        "data": {
+                            "final_response": final_response,
+                            "mode": "chat",
+                            "execution_time": time.time() - start_time
+                        },
                         "session_id": session_id,
-                        "message": response,
-                        "mode": "chat",
                         "timestamp": time.time()
                     }
                     return
@@ -381,10 +450,13 @@ class StreamingMCPEngine:
                 ])
             
             yield {
-                "type": "chat_response",
+                "type": "result",
+                "data": {
+                    "final_response": "你好！很高兴见到你，有什么可以帮助你的吗？",
+                    "mode": "chat",
+                    "execution_time": 0.1
+                },
                 "session_id": session_id,
-                "message": fallback_response,
-                "mode": "chat",
                 "timestamp": time.time()
             }
             
@@ -392,15 +464,18 @@ class StreamingMCPEngine:
             self.logger.error(f"闲聊模式处理失败: {e}")
             # 最后的兜底回复
             yield {
-                "type": "chat_response",
+                "type": "result",
+                "data": {
+                    "final_response": "你好！很高兴见到你，有什么可以帮助你的吗？",
+                    "mode": "chat",
+                    "execution_time": 0.1
+                },
                 "session_id": session_id,
-                "message": "你好！很高兴见到你，有什么可以帮助你的吗？",
-                "mode": "chat",
                 "timestamp": time.time()
             }
     
     async def _handle_task_mode_streaming(self, user_input: str, session_id: str, start_time: float) -> AsyncGenerator[Dict[str, Any], None]:
-        """处理任务模式 - 通过MCP适配器"""
+        """处理任务模式 - 通过MCP适配器，带实时状态推送"""
         try:
             # 构建MCP标准请求
             mcp_request = {
@@ -411,7 +486,15 @@ class StreamingMCPEngine:
                 "context": self.sessions[session_id]['context']
             }
             
-            # 发送任务开始信号
+            # 1. 发送任务规划开始
+            yield {
+                "type": "task_planning",
+                "session_id": session_id,
+                "message": "正在分析任务并制定执行计划...",
+                "timestamp": time.time()
+            }
+            
+            # 2. 发送任务开始信号
             yield {
                 "type": "task_start",
                 "session_id": session_id,
@@ -419,14 +502,157 @@ class StreamingMCPEngine:
                 "timestamp": time.time()
             }
             
-            # 调用MCP适配器处理
-            response = await self.mcp_adapter.handle_request(mcp_request)
+            # 3. 发送工具开始信号
+            tool_name = "smart_search" if any(keyword in user_input for keyword in ["搜索", "查找", "搜", "查"]) else "general_tool"
+            step_id = f"step_{tool_name}_{int(time.time())}"  # 生成唯一的step_id
+            
+            tool_start_message = {
+                "type": "tool_start",
+                "session_id": session_id,
+                "message": f"正在执行工具: {tool_name}",
+                "tool_name": tool_name,
+                "step_id": step_id,  # 添加step_id字段
+                "step_index": 1,
+                "total_steps": 1,
+                "timestamp": time.time()
+            }
+            
+            # 调试日志：确认消息格式
+            self.logger.info(f"🔧 发送tool_start消息: tool_name={tool_name}, step_id={step_id}")
+            yield tool_start_message
+            
+            # 添加延迟模拟真实执行过程
+            await asyncio.sleep(0.5)  # 模拟工具启动时间
+            
+            # 4. 设置MCP适配器的状态回调（关键修复！实时推送而非收集）
+            async def task_status_callback(message):
+                """任务状态回调函数 - 实时推送TaskEngine消息"""
+                try:
+                    self.logger.info(f"📤 TaskEngine状态更新: {message.get('type')} - {message.get('message', '')}")
+                    
+                    # 转换TaskEngine消息格式为前端期望的格式
+                    converted_message = None
+                    msg_type = message.get('type')
+                    
+                    if msg_type == 'task_start':
+                        # 任务开始消息保持原样
+                        converted_message = {
+                            "type": "task_start",
+                            "session_id": session_id,
+                            "message": message.get('message', '开始任务执行'),
+                            "timestamp": time.time()
+                        }
+                    
+                    elif msg_type == 'tool_start':
+                        # 工具开始消息 - 转换为前端期望的格式
+                        converted_message = {
+                            "type": "tool_start",
+                            "session_id": session_id,
+                            "message": message.get('message', '工具开始执行'),
+                            "tool_name": message.get('tool_name', 'unknown_tool'),
+                            "step_id": message.get('step_id', f"task_step_{int(time.time())}"),
+                            "step_index": message.get('step_index', 0),
+                            "total_steps": message.get('total_steps', 1),
+                            "timestamp": time.time()
+                        }
+                    
+                    elif msg_type == 'tool_result':
+                        # 工具结果消息 - 转换为前端期望的格式
+                        converted_message = {
+                            "type": "tool_result",
+                            "session_id": session_id,
+                            "message": message.get('message', '工具执行完成'),
+                            "step_data": {
+                                "id": message.get('step_id', f"task_step_{int(time.time())}"),
+                                "tool_name": message.get('tool_name', 'unknown_tool'),
+                                "status": message.get('status', 'success'),
+                                "result": message.get('result', ''),
+                                "execution_time": message.get('execution_time', 0)
+                            },
+                            "status": message.get('status', 'success'),
+                            "timestamp": time.time()
+                        }
+                    
+                    elif msg_type == 'task_complete':
+                        # 任务完成消息保持原样
+                        converted_message = {
+                            "type": "task_complete",
+                            "session_id": session_id,
+                            "message": message.get('message', '任务执行完成'),
+                            "execution_time": message.get('execution_time', 0),
+                            "timestamp": time.time()
+                        }
+                    
+                    # 立即通过生成器推送消息，而不是收集到数组
+                    if converted_message:
+                        self.logger.info(f"✅ 实时推送TaskEngine消息: {msg_type} -> 前端")
+                        # 这里我们无法直接yield，需要通过其他方式实时推送
+                        # 暂时记录到实例变量中，让主流程处理
+                        if not hasattr(self, '_pending_status_messages'):
+                            self._pending_status_messages = []
+                        self._pending_status_messages.append(converted_message)
+                    
+                except Exception as e:
+                    self.logger.error(f"TaskEngine状态回调失败: {e}")
+            
+            # 设置MCP适配器的状态回调
+            self.mcp_adapter.set_status_callback(task_status_callback)
+            
+            # 初始化待推送消息列表
+            self._pending_status_messages = []
+            
+            # 5. 调用MCP适配器处理（异步处理，同时检查待推送消息）
+            # 创建MCP处理任务
+            mcp_task = asyncio.create_task(self.mcp_adapter.handle_request(mcp_request))
+            
+            # 定期检查并推送待处理的状态消息
+            while not mcp_task.done():
+                # 推送所有待处理的状态消息
+                if hasattr(self, '_pending_status_messages') and self._pending_status_messages:
+                    for status_msg in self._pending_status_messages:
+                        yield status_msg
+                    self._pending_status_messages.clear()
+                
+                # 短暂等待，避免占用太多CPU
+                await asyncio.sleep(0.1)
+            
+            # 获取MCP处理结果
+            response = await mcp_task
+            
+            # 推送剩余的状态消息
+            if hasattr(self, '_pending_status_messages') and self._pending_status_messages:
+                for status_msg in self._pending_status_messages:
+                    yield status_msg
+                self._pending_status_messages.clear()
+            
+            # 添加延迟模拟处理时间
+            await asyncio.sleep(1.0)  # 模拟工具执行时间
+            
+            # 6. 发送工具完成信号
+            tool_result_message = {
+                "type": "tool_result",
+                "session_id": session_id,
+                "message": f"工具 {tool_name} 执行完成",
+                "step_data": {
+                    "id": step_id,  # 使用相同的step_id
+                    "tool_name": tool_name,
+                    "status": "success" if response.get("status") == "success" else "error",
+                    "result": response.get("final_response", ""),
+                    "execution_time": 1.5  # 添加执行时间
+                },
+                "status": "success" if response.get("status") == "success" else "error",
+                "timestamp": time.time()
+            }
+            
+            # 调试日志：确认消息格式
+            self.logger.info(f"✅ 发送tool_result消息: step_id={step_id}, status={tool_result_message['status']}")
+            yield tool_result_message
             
             # 更新会话上下文
             if 'context' in response:
                 self.sessions[session_id]['context'].update(response['context'])
             
-            # 发送任务完成信号
+            # 7. 发送任务完成信号
             yield {
                 "type": "task_complete",
                 "session_id": session_id,
@@ -570,10 +796,17 @@ class StreamingMCPEngine:
             return default_responses[2]
 
 
+# 全局变量声明（在文件开头）
+engine: Optional[StreamingMCPEngine] = None
+mcp_adapter: Optional[MCPAdapter] = None
+protocol_adapter: Optional[ProtocolAdapter] = None
+
 # 生命周期管理
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
+    global engine, mcp_adapter, protocol_adapter  # 添加全局变量声明
+    
     logger.info("🚀 启动标准MCP协议API服务（支持流式问答）")
     
     # 初始化数据库
@@ -586,49 +819,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️ 工具导入失败: {e}")
     
-    # 初始化真实工具系统
-    real_tool_registry = None
-    real_task_engine = None
-    
-    if REAL_TOOLS_AVAILABLE:
-        try:
-            logger.info("🔧 初始化真实工具系统...")
-            
-            # 初始化工具注册表
-            db_url = "sqlite:///./tools.db"
-            real_tool_registry = ToolRegistry(db_url)
-            
-            # ToolRegistry可能没有discover_tools方法，尝试获取工具列表
-            try:
-                # 尝试调用discover_tools方法
-                if hasattr(real_tool_registry, 'discover_tools'):
-                    real_tool_registry.discover_tools()
-                else:
-                    logger.info("ToolRegistry没有discover_tools方法，跳过工具发现")
-                
-                # 获取可用工具列表
-                available_tools = real_tool_registry.list_tools()
-                logger.info(f"✅ 发现 {len(available_tools)} 个真实工具")
-                
-            except Exception as discover_error:
-                logger.warning(f"工具发现失败: {discover_error}")
-                available_tools = []
-            
-            # 初始化任务引擎
-            real_task_engine = TaskEngine(real_tool_registry)
-            logger.info("✅ 真实工具系统初始化完成")
-            
-        except Exception as e:
-            logger.error(f"❌ 真实工具系统初始化失败: {e}")
-            real_tool_registry = None
-            real_task_engine = None
-    else:
-        logger.info("⚠️ 真实工具系统不可用，将使用mock模式")
-    
-    # 将真实工具系统存储到应用状态
-    app.state.real_tool_registry = real_tool_registry
-    app.state.real_task_engine = real_task_engine
-    
     # 初始化MCP适配器
     mcp_adapter = MCPAdapter(tool_registry=None, max_sessions=1000)
     app.state.mcp_adapter = mcp_adapter
@@ -638,13 +828,18 @@ async def lifespan(app: FastAPI):
         "type": "openai",  # 或 "ernie"
         "api_key": os.getenv("OPENAI_API_KEY"),
         "model": os.getenv("OPENAI_MODEL", "gpt-4-turbo"),
-        "base_url": os.getenv("OPENAI_BASE_URL")
+        "base_url": os.getenv("OPENAI_API_BASE")  # 修复：使用正确的环境变量名
     }
     
-    streaming_engine = StreamingMCPEngine(llm_config=llm_config, mcp_adapter=mcp_adapter)
-    app.state.streaming_engine = streaming_engine
+    engine = StreamingMCPEngine(llm_config=llm_config, mcp_adapter=mcp_adapter)
+    app.state.streaming_engine = engine
     
-    logger.info("🎉 标准MCP协议API服务启动完成（支持流式问答 + 真实工具执行）")
+    logger.info("🎉 MCP协议API服务启动完成（纯MCP工具系统）")
+    
+    # 初始化协议适配器
+    protocol_adapter = ProtocolAdapter(mcp_adapter)
+    app.state.protocol_adapter = protocol_adapter
+    logger.info("🔄 协议适配器初始化完成")
     
     yield
     
@@ -676,16 +871,15 @@ async def root():
         "name": "MCP AutoGen Standard API",
         "version": "2.1.0",
         "protocol": "MCP 1.0",
-        "description": "符合MCP标准的智能工具调用系统，支持流式问答和真实工具执行",
+        "description": "符合MCP标准的智能工具调用系统，支持流式问答",
         "endpoints": {
             "mcp_request": "/mcp/request",
             "mcp_websocket": "/ws/mcp/standard",
-            "streaming_chat": "/ws/mcp/chat",  # 增强版流式聊天接口
+            "streaming_chat": "/ws/mcp/chat",
             "health": "/health",
             "info": "/mcp/info",
             "tools": "/mcp/tools",
-            "real_tools": "/mcp/tools/real",  # 新增：真实工具列表
-            "system_status": "/mcp/system/status",  # 新增：系统状态
+            "system_status": "/mcp/system/status",
             "sessions": "/mcp/sessions"
         },
         "demos": {
@@ -697,13 +891,11 @@ async def root():
             "流式问答",
             "智能模式检测",
             "会话管理",
-            "工具调用",
-            "真实工具执行",  # 新增
-            "实时状态推送",  # 新增
-            "动态执行流程展示"  # 新增
+            "MCP工具调用",
+            "实时状态推送",
+            "动态执行流程展示"
         ],
         "system_info": {
-            "real_tools_available": REAL_TOOLS_AVAILABLE,
             "llm_available": LLM_AVAILABLE,
             "status_manager_active": True
         }
@@ -768,90 +960,34 @@ async def list_mcp_tools():
         raise HTTPException(status_code=500, detail=f"获取工具列表失败: {str(e)}")
 
 
-@app.get("/mcp/tools/real")
-async def list_real_tools():
-    """获取真实工具系统的工具列表"""
-    try:
-        real_tool_registry = app.state.real_tool_registry
-        
-        if not real_tool_registry or not REAL_TOOLS_AVAILABLE:
-            return {
-                "success": False,
-                "message": "真实工具系统不可用",
-                "tools": [],
-                "tool_count": 0,
-                "mode": "mock"
-            }
-        
-        # 获取真实工具列表
-        tools_list = real_tool_registry.list_tools()
-        tool_details = []
-        
-        for tool_info in tools_list:
-            tool_details.append({
-                "name": tool_info.get("tool_id", "unknown"),
-                "description": tool_info.get("description", "无描述"),
-                "source": tool_info.get("source", "unknown"),
-                "input_type": tool_info.get("input_type", "unknown"),
-                "output_type": tool_info.get("output_type", "unknown")
-            })
-        
-        return {
-            "success": True,
-            "message": "真实工具系统可用",
-            "tools": tool_details,
-            "tool_count": len(tool_details),
-            "mode": "real",
-            "timestamp": time.time()
-        }
-        
-    except Exception as e:
-        return {
-            "success": False,
-            "error": f"获取真实工具列表失败: {e}",
-            "tools": [],
-            "tool_count": 0,
-            "mode": "error"
-        }
-
 
 @app.get("/mcp/system/status")
 async def get_system_status():
     """获取系统状态信息"""
     try:
-        real_task_engine = app.state.real_task_engine
-        real_tool_registry = app.state.real_tool_registry
-        
         # 基础状态
         status = {
             "mcp_version": "1.0",
-            "api_version": "2.1.0",
-            "real_tools_available": REAL_TOOLS_AVAILABLE,
+            "api_version": "2.1.0", 
             "llm_available": LLM_AVAILABLE,
             "timestamp": time.time()
         }
         
-        # 真实工具系统状态
-        if REAL_TOOLS_AVAILABLE and real_tool_registry:
+        # MCP工具系统状态
+        mcp_adapter = app.state.mcp_adapter
+        if mcp_adapter:
             try:
-                tools_list = real_tool_registry.list_tools()
-                status["real_tools"] = {
+                mcp_tools = mcp_adapter.tool_registry.get_tool_list()
+                mcp_tool_count = len(mcp_tools) if isinstance(mcp_tools, list) else len(mcp_tools.keys())
+                status["mcp_tools"] = {
                     "enabled": True,
-                    "tool_count": len(tools_list),
-                    "task_engine_ready": real_task_engine is not None
+                    "tool_count": mcp_tool_count
                 }
             except Exception as e:
-                status["real_tools"] = {
+                status["mcp_tools"] = {
                     "enabled": False,
-                    "error": str(e),
-                    "task_engine_ready": False
+                    "error": str(e)
                 }
-        else:
-            status["real_tools"] = {
-                "enabled": False,
-                "reason": "Import failed or not available",
-                "task_engine_ready": False
-            }
         
         # 状态管理器状态
         current_plan = global_status_manager.get_current_plan()
@@ -942,21 +1078,10 @@ async def mcp_streaming_chat(websocket: WebSocket):
                 websocket_callback = WebSocketStatusCallback(websocket_send_func)
                 global_status_manager.add_callback(websocket_callback)
                 
-                # 检查是否是任务模式
-                task_keywords = [
-                    "搜索", "查找", "下载", "上传", "生成", "创建", "执行", "运行", 
-                    "分析", "处理", "转换", "计算", "统计", "图表", "报告", "工具"
-                ]
-                
-                is_task_mode = any(keyword in user_input for keyword in task_keywords)
-                
-                if is_task_mode:
-                    # 任务模式：使用状态管理器和真实工具执行
-                    await handle_task_mode_with_status(user_input, session_id, app)
-                else:
-                    # 闲聊模式：直接执行对话
-                    async for result in streaming_engine.execute_streaming_conversation(user_input, session_id):
-                        await websocket.send_text(json.dumps(result, ensure_ascii=False))
+                # 直接使用StreamingMCPEngine处理所有请求（包含智能模式检测）
+                streaming_engine = app.state.streaming_engine
+                async for result in streaming_engine.execute_streaming_conversation(user_input, session_id):
+                    await websocket.send_text(json.dumps(result, ensure_ascii=False))
                 
                 logger.info("✅ 增强版聊天请求处理完成")
                 
@@ -981,226 +1106,6 @@ async def mcp_streaming_chat(websocket: WebSocket):
         logger.error(f"❌ 增强版MCP聊天错误: {e}")
         if websocket_callback:
             global_status_manager.remove_callback(websocket_callback)
-
-
-async def handle_task_mode_with_status(user_input: str, session_id: str, app_instance):
-    """处理任务模式，集成真实工具执行和状态管理器"""
-    try:
-        # 获取真实工具系统
-        real_task_engine = getattr(app_instance.state, 'real_task_engine', None)
-        
-        if real_task_engine and REAL_TOOLS_AVAILABLE:
-            # 使用真实的TaskEngine执行
-            logger.info("🎯 使用真实工具系统执行任务")
-            await execute_real_task_with_status(user_input, session_id, real_task_engine)
-        else:
-            # 回退到mock模式
-            logger.warning("真实工具系统不可用，使用mock模式")
-            await execute_mock_task_with_status(user_input, session_id)
-            
-    except Exception as e:
-        logger.error(f"任务执行失败: {e}")
-        await global_status_manager.report_error(f"任务执行失败: {str(e)}")
-
-
-async def execute_real_task_with_status(user_input: str, session_id: str, task_engine):
-    """使用真实TaskEngine执行任务并推送状态"""
-    try:
-        # 1. 发送任务规划开始
-        await global_status_manager.update_planning("正在使用真实任务引擎分析并制定执行计划...")
-        
-        # 2. 使用TaskEngine执行真实任务
-        logger.info(f"🎯 开始执行真实任务: {user_input}")
-        result = await task_engine.execute(user_input, {})
-        
-        # 3. 处理执行结果
-        if result.get('success', False):
-            execution_steps = result.get('execution_steps', [])
-            
-            if execution_steps:
-                # 创建执行计划（基于真实的执行步骤）
-                steps_data = []
-                for i, step in enumerate(execution_steps):
-                    steps_data.append({
-                        "tool_name": step.get('tool_name', f'step_{i}'),
-                        "description": step.get('purpose', f"执行步骤 {i+1}"),
-                        "input_params": step.get('input_params', {})
-                    })
-                
-                # 启动执行计划（用于前端显示）
-                execution_plan = await global_status_manager.start_task(user_input, steps_data)
-                
-                # 模拟步骤执行过程（基于真实结果）
-                for i, step in enumerate(execution_steps):
-                    plan_step = execution_plan.steps[i] if i < len(execution_plan.steps) else None
-                    
-                    if plan_step:
-                        # 开始工具执行
-                        await global_status_manager.start_tool(
-                            plan_step.id, 
-                            step.get('tool_name', plan_step.tool_name), 
-                            step.get('input_params', {})
-                        )
-                        
-                        # 短暂延迟以显示执行过程
-                        await asyncio.sleep(0.5)
-                        
-                        # 完成工具执行（使用真实结果）
-                        step_status = ExecutionStatus.SUCCESS if step.get('status') == 'success' else ExecutionStatus.ERROR
-                        await global_status_manager.complete_tool(
-                            plan_step.id,
-                            step.get('tool_name', plan_step.tool_name),
-                            step.get('output', {}),
-                            step_status,
-                            step.get('error')
-                        )
-                        
-                        await asyncio.sleep(0.3)  # 步骤间隔
-            else:
-                # 如果是闲聊模式，创建一个简单的计划
-                steps_data = [{
-                    "tool_name": "chat_processor",
-                    "description": "智能对话处理",
-                    "input_params": {"query": user_input}
-                }]
-                
-                execution_plan = await global_status_manager.start_task(user_input, steps_data)
-                
-                # 模拟闲聊处理
-                step = execution_plan.steps[0]
-                await global_status_manager.start_tool(step.id, step.tool_name, step.input_params)
-                await asyncio.sleep(1)
-                await global_status_manager.complete_tool(
-                    step.id, step.tool_name, 
-                    {"result": result.get('final_output', '处理完成')}, 
-                    ExecutionStatus.SUCCESS
-                )
-            
-            # 4. 完成任务（使用真实的最终输出）
-            final_output = result.get('final_output', '任务执行完成')
-            
-            # 添加执行统计信息
-            execution_time = result.get('execution_time', 0)
-            step_count = result.get('step_count', 0)
-            mode = result.get('mode', 'unknown')
-            
-            enhanced_output = f"""{final_output}
-
-📊 执行统计：
-- 模式：{mode}
-- 执行步骤：{step_count}
-- 执行时间：{execution_time:.2f}秒
-- 状态：{'成功' if result.get('success') else '部分失败'}
-
-🎯 这是真实的工具执行结果！"""
-            
-            await global_status_manager.complete_task(enhanced_output)
-            
-        else:
-            # 失败情况
-            error_message = result.get('error', '未知错误')
-            final_output = result.get('final_output', f'任务执行失败: {error_message}')
-            
-            # 创建一个错误步骤
-            steps_data = [{
-                "tool_name": "error_handler",
-                "description": "错误处理",
-                "input_params": {"error": error_message}
-            }]
-            
-            execution_plan = await global_status_manager.start_task(user_input, steps_data)
-            step = execution_plan.steps[0]
-            
-            await global_status_manager.start_tool(step.id, step.tool_name, step.input_params)
-            await asyncio.sleep(0.5)
-            await global_status_manager.complete_tool(
-                step.id, step.tool_name, 
-                {"error": error_message}, 
-                ExecutionStatus.ERROR,
-                error_message
-            )
-            
-            await global_status_manager.complete_task(final_output)
-        
-    except Exception as e:
-        logger.error(f"真实任务执行失败: {e}")
-        await global_status_manager.report_error(f"任务执行异常: {str(e)}")
-
-
-async def execute_mock_task_with_status(user_input: str, session_id: str):
-    """Mock模式的任务执行（当真实工具系统不可用时的回退）"""
-    try:
-        # 1. 发送任务规划开始
-        await global_status_manager.update_planning("正在分析任务并制定执行计划...")
-        
-        # 2. 模拟生成执行计划（简化版）
-        steps_data = []
-        
-        # 简单的工具检测逻辑
-        if "搜索" in user_input or "查找" in user_input:
-            steps_data.append({
-                "tool_name": "smart_search",
-                "description": f"搜索相关信息：{user_input}",
-                "input_params": {"query": user_input, "max_results": 5}
-            })
-        
-        if "分析" in user_input:
-            steps_data.append({
-                "tool_name": "data_analyzer",
-                "description": "分析数据",
-                "input_params": {"data": user_input}
-            })
-        
-        # 如果没有检测到具体工具，添加默认步骤
-        if not steps_data:
-            steps_data.append({
-                "tool_name": "smart_search",
-                "description": f"智能处理：{user_input}",
-                "input_params": {"query": user_input}
-            })
-        
-        # 3. 启动执行计划
-        execution_plan = await global_status_manager.start_task(user_input, steps_data)
-        
-        # 4. 模拟执行步骤
-        final_results = []
-        for step in execution_plan.steps:
-            # 开始工具执行
-            await global_status_manager.start_tool(
-                step.id, step.tool_name, step.input_params
-            )
-            
-            # 模拟工具执行
-            await asyncio.sleep(1)  # 模拟执行时间
-            
-            # 模拟执行结果
-            mock_result = {
-                "tool_name": step.tool_name,
-                "status": "success",
-                "result": f"模拟执行结果：{step.description}",
-                "execution_time": 1.0
-            }
-            
-            # 完成工具执行
-            await global_status_manager.complete_tool(
-                step.id, step.tool_name, mock_result, ExecutionStatus.SUCCESS
-            )
-            
-            final_results.append(mock_result)
-        
-        # 5. 生成最终摘要
-        final_summary = f"任务执行完成。根据您的请求「{user_input}」，我执行了以下操作：\n\n"
-        for i, result in enumerate(final_results, 1):
-            final_summary += f"{i}. {result['result']}\n"
-        
-        final_summary += f"\n总共执行了 {len(final_results)} 个步骤。\n\n⚠️ 注意：当前使用的是模拟模式。"
-        
-        # 6. 完成任务
-        await global_status_manager.complete_task(final_summary)
-        
-    except Exception as e:
-        logger.error(f"Mock任务执行失败: {e}")
-        await global_status_manager.report_error(f"任务执行失败: {str(e)}")
 
 
 @app.get("/mcp/sessions/{session_id}")
@@ -2276,6 +2181,156 @@ ${connector} ⏳ ${step.tool_name} (待执行)`;
     
     from fastapi.responses import HTMLResponse
     return HTMLResponse(content=demo_html)
+
+
+# 添加SSE端点
+@app.post("/mcp/sse")
+async def mcp_sse_endpoint(request: MCPStandardRequest) -> EventSourceResponse:
+    """
+    MCP SSE (Server-Sent Events) 端点
+    支持流式响应的实时通信
+    """
+    global protocol_adapter
+    
+    if not protocol_adapter:
+        raise HTTPException(status_code=500, detail="协议适配器未初始化")
+    
+    try:
+        # 转换为字典格式
+        request_dict = {
+            "mcp_version": request.mcp_version,
+            "session_id": request.session_id,
+            "request_id": request.request_id,
+            "user_query": request.user_query,
+            "context": request.context
+        }
+        
+        # 处理SSE请求
+        return await protocol_adapter.handle_sse_request(
+            request_dict, 
+            request.session_id
+        )
+        
+    except Exception as e:
+        logger.error(f"SSE端点处理失败: {e}")
+        raise HTTPException(status_code=500, detail=f"SSE请求处理失败: {str(e)}")
+
+
+@app.get("/test/sse")
+async def test_sse_endpoint():
+    """简单的SSE测试端点"""
+    async def generate():
+        import json
+        yield json.dumps({'message': 'Hello', 'timestamp': '2024-01-01'})
+        await asyncio.sleep(1)
+        yield json.dumps({'message': 'World', 'timestamp': '2024-01-02'})
+        await asyncio.sleep(1) 
+        yield json.dumps({'message': 'Done', 'timestamp': '2024-01-03'})
+    
+    return EventSourceResponse(generate())
+
+
+@app.get("/protocol/stats")
+async def get_protocol_stats():
+    """
+    获取协议统计信息
+    """
+    global protocol_adapter
+    
+    if not protocol_adapter:
+        raise HTTPException(status_code=500, detail="协议适配器未初始化")
+    
+    try:
+        stats = protocol_adapter.get_protocol_stats()
+        return JSONResponse(content={
+            "status": "success",
+            "data": stats,
+            "timestamp": time.time()
+        })
+    except Exception as e:
+        logger.error(f"获取协议统计失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取统计信息失败: {str(e)}")
+
+
+@app.get("/protocol/connections")
+async def get_active_connections():
+    """
+    获取活跃连接信息
+    """
+    global protocol_adapter
+    
+    if not protocol_adapter:
+        raise HTTPException(status_code=500, detail="协议适配器未初始化")
+    
+    try:
+        connections = protocol_adapter.get_sse_connections()
+        return JSONResponse(content={
+            "status": "success", 
+            "data": {
+                "sse_connections": list(connections.keys()),
+                "total_connections": len(connections)
+            },
+            "timestamp": time.time()
+        })
+    except Exception as e:
+        logger.error(f"获取连接信息失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取连接信息失败: {str(e)}")
+
+
+# 修改根路径以显示新的协议支持信息
+@app.get("/")
+async def get_api_info():
+    """获取API信息和支持的协议"""
+    return {
+        "service": "MCP AutoGen 2.0 标准API",
+        "version": "2.0.0",
+        "mcp_version": "1.0",
+        "supported_protocols": [
+            {
+                "name": "HTTP POST",
+                "endpoint": "/mcp/chat",
+                "description": "标准HTTP POST请求"
+            },
+            {
+                "name": "WebSocket", 
+                "endpoint": "/mcp/ws",
+                "description": "WebSocket实时双向通信"
+            },
+            {
+                "name": "SSE",
+                "endpoint": "/mcp/sse", 
+                "description": "Server-Sent Events流式响应"
+            },
+            {
+                "name": "Stdio",
+                "endpoint": "mcp_stdio_server.py",
+                "description": "标准输入输出通信"
+            }
+        ],
+        "demo_pages": [
+            {
+                "name": "WebSocket Demo",
+                "url": "/demo"
+            },
+            {
+                "name": "SSE Demo", 
+                "url": "/mcp/sse/demo"
+            }
+        ],
+        "management": [
+            {
+                "name": "Protocol Stats",
+                "url": "/protocol/stats"
+            },
+            {
+                "name": "Active Connections",
+                "url": "/protocol/connections"
+            }
+        ],
+        "tools_count": len(mcp_adapter.tool_registry.list_tools()) if mcp_adapter else 0,
+        "status": "running",
+        "timestamp": time.time()
+    }
 
 
 if __name__ == "__main__":

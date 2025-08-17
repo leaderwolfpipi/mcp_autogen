@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket状态推送测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .test-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        
+        .test-button {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .messages {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 10px 0;
+            background: #f9f9f9;
+        }
+        
+        .message {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #007bff;
+            background: white;
+        }
+        
+        .message.task_start {
+            border-left-color: #28a745;
+        }
+        
+        .message.tool_start {
+            border-left-color: #ffc107;
+        }
+        
+        .message.tool_result {
+            border-left-color: #17a2b8;
+        }
+        
+        .message.task_complete {
+            border-left-color: #6f42c1;
+        }
+        
+        .message.error {
+            border-left-color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebSocket状态推送测试</h1>
+        
+        <div id="status" class="status disconnected">
+            未连接
+        </div>
+        
+        <div>
+            <input type="text" id="userInput" class="test-input" 
+                   placeholder="输入测试查询（如：张良是谁）" 
+                   value="张良是谁">
+            <button onclick="sendMessage()" class="test-button">发送测试</button>
+            <button onclick="connect()" class="test-button">连接</button>
+            <button onclick="disconnect()" class="test-button">断开</button>
+            <button onclick="clearMessages()" class="test-button">清空消息</button>
+        </div>
+        
+        <div class="messages" id="messages">
+            <!-- 消息将在这里显示 -->
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let messageCount = 0;
+
+        function updateStatus(text, connected) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = text;
+            statusEl.className = `status ${connected ? 'connected' : 'disconnected'}`;
+        }
+
+        function addMessage(type, data) {
+            const messagesEl = document.getElementById('messages');
+            const messageEl = document.createElement('div');
+            messageEl.className = `message ${type}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            messageEl.innerHTML = `
+                <strong>[${timestamp}] ${type.toUpperCase()}</strong><br>
+                <pre>${JSON.stringify(data, null, 2)}</pre>
+            `;
+            
+            messagesEl.appendChild(messageEl);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+            
+            messageCount++;
+        }
+
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                return;
+            }
+
+            updateStatus('正在连接...', false);
+            
+            ws = new WebSocket('ws://localhost:8000/ws/mcp/chat');
+            
+            ws.onopen = function() {
+                updateStatus('已连接', true);
+                addMessage('connection', { status: 'connected' });
+            };
+            
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    addMessage(data.type || 'unknown', data);
+                } catch (e) {
+                    addMessage('parse_error', { error: e.message, raw: event.data });
+                }
+            };
+            
+            ws.onclose = function(event) {
+                updateStatus('连接已关闭', false);
+                addMessage('connection', { status: 'disconnected', code: event.code, reason: event.reason });
+            };
+            
+            ws.onerror = function(error) {
+                updateStatus('连接错误', false);
+                addMessage('error', { error: error.message });
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function sendMessage() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('请先连接WebSocket');
+                return;
+            }
+
+            const userInput = document.getElementById('userInput').value.trim();
+            if (!userInput) {
+                alert('请输入测试内容');
+                return;
+            }
+
+            const message = {
+                user_input: userInput,
+                session_id: 'test_session_' + Date.now()
+            };
+
+            addMessage('send', message);
+            ws.send(JSON.stringify(message));
+        }
+
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+            messageCount = 0;
+        }
+
+        // 页面加载时自动连接
+        window.onload = function() {
+            connect();
+        };
+
+        // 支持回车发送
+        document.getElementById('userInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html> 
