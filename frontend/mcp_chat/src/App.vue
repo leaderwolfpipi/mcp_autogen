@@ -4301,4 +4301,291 @@ onUnmounted(() => {
   opacity: 1;
   transform: translateY(2px);
 }
+
+/* 🌟 奢华大气：下载链接全新设计 */
+:deep(.download-link) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 32px;
+  margin: 16px 24px 16px 48px; /* 重要：增加左侧间距远离边界 */
+  color: #1e293b;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.3px;
+  border-radius: 20px;
+  border: 2px solid transparent;
+  background: 
+    linear-gradient(#fff, #fff) padding-box,
+    linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%) border-box;
+  position: relative;
+  overflow: hidden;
+  min-height: 64px;
+  min-width: 280px;
+  max-width: 480px;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: 
+    0 8px 32px rgba(102, 126, 234, 0.15),
+    0 4px 16px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(16px);
+  transform: translateZ(0); /* 启用硬件加速 */
+}
+
+/* 奢华光影效果 */
+:deep(.download-link::before) {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, 
+    transparent,
+    rgba(255, 255, 255, 0.4),
+    transparent
+  );
+  transition: left 0.6s ease;
+}
+
+/* 悬停：奢华提升效果 */
+:deep(.download-link:hover) {
+  transform: translateY(-6px) scale(1.03);
+  border-color: #667eea;
+  background: 
+    linear-gradient(135deg, rgba(255,255,255,0.95), rgba(248,250,252,0.98)) padding-box,
+    linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%) border-box;
+  box-shadow: 
+    0 20px 48px rgba(102, 126, 234, 0.25),
+    0 8px 24px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  color: #0f172a;
+}
+
+:deep(.download-link:hover::before) {
+  left: 100%;
+}
+
+/* 点击反馈 */
+:deep(.download-link:active) {
+  transform: translateY(-2px) scale(1.01);
+  transition: transform 0.15s ease;
+}
+
+/* 文件名区域 */
+:deep(.download-link .file-name) {
+  flex: 1;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* 精致下载图标 */
+:deep(.download-link::after) {
+  content: "⬇";
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: bold;
+  box-shadow: 
+    0 4px 12px rgba(102, 126, 234, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+  animation: breathe 3s ease-in-out infinite;
+}
+
+:deep(.download-link:hover::after) {
+  transform: scale(1.1) rotate(5deg);
+  box-shadow: 
+    0 6px 16px rgba(102, 126, 234, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* 呼吸动画 */
+@keyframes breathe {
+  0%, 100% { 
+    transform: scale(1); 
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  }
+  50% { 
+    transform: scale(1.05); 
+    box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+  }
+}
+
+/* 🎨 文件列表容器 - 奢华卡片设计 */
+:deep(.final-result ul),
+:deep(.message-text ul) {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.9) 0%, 
+    rgba(248, 250, 252, 0.95) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 24px;
+  padding: 32px 40px;
+  margin: 24px 32px; /* 重要：增加左右间距 */
+  backdrop-filter: blur(20px);
+  box-shadow: 
+    0 16px 64px rgba(0, 0, 0, 0.08),
+    0 8px 32px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  position: relative;
+}
+
+/* 容器装饰光效 */
+:deep(.final-result ul::before),
+:deep(.message-text ul::before) {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, 
+    rgba(102, 126, 234, 0.08) 0%, 
+    transparent 70%);
+  border-radius: 50%;
+  transform: translate(50%, -50%);
+  animation: float 8s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(50%, -50%) scale(1); opacity: 0.6; }
+  50% { transform: translate(45%, -45%) scale(1.1); opacity: 0.8; }
+}
+
+/* 列表项 - 奢华卡片 */
+:deep(.final-result li),
+:deep(.message-text li) {
+  position: relative;
+  margin: 20px 0;
+  padding: 24px 28px 24px 56px; /* 增加左侧空间给图标 */
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.95), 
+    rgba(248, 250, 252, 0.9));
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(10px);
+}
+
+:deep(.final-result li:hover),
+:deep(.message-text li:hover) {
+  transform: translateX(12px) translateY(-2px);
+  border-color: #667eea;
+  box-shadow: 
+    0 12px 32px rgba(102, 126, 234, 0.15),
+    0 6px 16px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+/* 精致文件图标 */
+:deep(.final-result li::before),
+:deep(.message-text li::before) {
+  content: '📁';
+  position: absolute;
+  left: -20px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  font-size: 20px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  box-shadow: 
+    0 8px 24px rgba(102, 126, 234, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  border: 4px solid white;
+  transition: all 0.3s ease;
+}
+
+:deep(.final-result li:hover::before),
+:deep(.message-text li:hover::before) {
+  transform: translateY(-50%) scale(1.1) rotate(5deg);
+  box-shadow: 
+    0 12px 32px rgba(102, 126, 234, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* 有效期特殊标识 */
+:deep(.final-result li:has-text("有效期")),
+:deep(.message-text li:has-text("有效期")) {
+  border-color: #f59e0b;
+  background: linear-gradient(135deg, 
+    rgba(245, 158, 11, 0.08), 
+    rgba(245, 158, 11, 0.04));
+}
+
+:deep(.final-result li:has-text("有效期")::before),
+:deep(.message-text li:has-text("有效期")::before) {
+  content: '⏰';
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  box-shadow: 
+    0 8px 24px rgba(245, 158, 11, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* 成功上传横幅 */
+:deep(.message-text:has-text("成功上传")) {
+  padding-top: 72px !important;
+  position: relative;
+  border-radius: 24px !important;
+}
+
+:deep(.message-text:has-text("成功上传")::before) {
+  content: "✨ 文件上传成功";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  padding: 0 24px;
+  border-radius: 24px 24px 0 0;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 
+    0 4px 16px rgba(16, 185, 129, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* 响应式优化 */
+@media (max-width: 768px) {
+  :deep(.download-link) {
+    margin: 12px 16px 12px 24px;
+    padding: 16px 24px;
+    min-width: 240px;
+    min-height: 56px;
+  }
+  
+  :deep(.final-result ul),
+  :deep(.message-text ul) {
+    margin: 16px 20px;
+    padding: 24px 28px;
+  }
+  
+  :deep(.final-result li),
+  :deep(.message-text li) {
+    padding: 20px 24px 20px 48px;
+  }
+}
 </style>
